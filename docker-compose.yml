@@ -1,0 +1,97 @@
+services:
+  config-app:
+    build:
+      context: ./config-app
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: ghcr.io/${UPDATE_REPO:-your-org/haproxy-dashboard}/config-app:${IMAGE_TAG:-latest}
+    container_name: acme-config-app
+    environment:
+      - PLATFORM_DOMAIN=${PLATFORM_DOMAIN:-platform.example.local}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Getrennte, hoehere Rolle fuer system.update (RBAC). Leer = faellt auf Admin zurueck.
+      - PLATFORM_ADMIN_USER=${PLATFORM_ADMIN_USER:-}
+      - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-}
+      - CONFIG_DIR=/app/config
+      - HAPROXY_OUT=/app/haproxy_out
+      - UPDATE_DIR=/app/update
+      # APP_VERSION wird NICHT hier gesetzt - es ist im Image gebacken (build-arg),
+      # damit ein gepulltes GHCR-Image seine echte Release-Version meldet.
+      - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}
+      - UPDATE_TOKEN=${UPDATE_TOKEN:-}
+      - UPDATE_MODE=${UPDATE_MODE:-manual}
+      # Nur zur Anzeige im Admin-GUI (der Zeitplan selbst laeuft host-seitig als systemd-Timer)
+      - AUTO_UPDATE=${AUTO_UPDATE:-false}
+      - AUTO_UPDATE_SCHEDULE=${AUTO_UPDATE_SCHEDULE:-}
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      # services.yaml + Theme (auf dem Host einsehbar/editierbar)
+      - ./data/config:/app/config
+      # generierte haproxy.cfg (mit haproxy-Container geteilt)
+      - ./data/haproxy:/app/haproxy_out
+      # Update-Anforderung/Ergebnis/Audit - Host-Bind, damit der HOST-seitige
+      # Updater (systemd) die Anforderung liest. config-app schreibt hier NUR
+      # eine Anforderung; es hat KEINEN Docker-Socket und fuehrt nie Docker aus.
+      - ./data/update:/app/update
+    # KEIN Docker-Socket - bewusst. Privilegierte Aktionen laufen ausschliesslich
+    # im host-seitigen Updater ausserhalb der Container-Vertrauensgrenze.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # M1: Container-Haertung. Python-App braucht keine Linux-Capabilities; das
+    # Root-FS ist read-only (Schreiben nur in die gemounteten Volumes + /tmp).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - platform
+    restart: unless-stopped
+
+  haproxy:
+    build: ./haproxy
+    image: ghcr.io/${UPDATE_REPO:-your-org/haproxy-dashboard}/haproxy:${IMAGE_TAG:-latest}
+    container_name: acme-haproxy
+    depends_on:
+      - config-app
+    environment:
+      - PLATFORM_DOMAIN=${PLATFORM_DOMAIN:-platform.example.local}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Hier deine .crt + .key ablegen (read-only)
+      - ./certs:/certs:ro
+      # geteilte generierte Config
+      - ./data/haproxy:/etc/haproxy/dynamic
+    # Erlaubt Backends per host-published Port zu erreichen: im GUI als Backend
+    # "host.docker.internal:PORT" eintragen. (Auf Docker Desktop automatisch;
+    # unter Linux liefert dieser Eintrag die noetige Host-Gateway-Aufloesung.)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # M1: Haertung. HAProxy braucht nur NET_BIND_SERVICE (Ports 80/443); alle
+    # anderen Capabilities werden entzogen und Privilege-Escalation unterbunden.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      - platform
+    restart: unless-stopped
+
+# Gemeinsames Netz. Deine Anwendungs-Container koennen diesem Netz beitreten,
+# dann erreicht HAProxy sie ueber den Container-Namen (z.B. abfallmanager:8080).
+# Alternativ gibst du pro Kachel einfach Host:Port / IP:Port an.
+networks:
+  platform:
+    name: acme-platform
+    driver: bridge

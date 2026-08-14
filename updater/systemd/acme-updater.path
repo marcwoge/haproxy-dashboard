@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for Acme update requests (request.json)
+
+[Path]
+# Loest acme-updater.service aus, sobald die App eine Anforderung schreibt.
+PathExists=__PROJECT_DIR__/data/update/request.json
+Unit=acme-updater.service
+
+[Install]
+WantedBy=multi-user.target

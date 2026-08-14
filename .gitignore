@@ -1,0 +1,16 @@
+# Echte Konfiguration mit Geheimnissen (Template: .env.example)
+.env
+
+# Docker-secrets (M4) - niemals einchecken
+/secrets/
+
+# Laufzeitdaten / generierte Dateien
+/data/
+
+# Zertifikate / Schluessel niemals einchecken
+/certs/*
+!/certs/README.txt
+
+# Python
+__pycache__/
+*.pyc

@@ -1,0 +1,61 @@
+name: Release
+
+# Baut bei jedem Versions-Tag (vX.Y.Z) die privaten Images, schiebt sie nach GHCR
+# und SIGNIERT sie keyless mit cosign (Sigstore, OIDC). Nutzt nur den eingebauten
+# GITHUB_TOKEN - es wird KEIN persoenlicher Token benoetigt.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # fuer keyless cosign-Signierung (OIDC)
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build & push config-app
+        id: config
+        uses: docker/build-push-action@v6
+        with:
+          context: ./config-app
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/config-app:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/config-app:latest
+
+      - name: Build & push haproxy
+        id: haproxy
+        uses: docker/build-push-action@v6
+        with:
+          context: ./haproxy
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/haproxy:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/haproxy:latest
+
+      - name: Sign images (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign "ghcr.io/${{ github.repository }}/config-app@${{ steps.config.outputs.digest }}"
+          cosign sign "ghcr.io/${{ github.repository }}/haproxy@${{ steps.haproxy.outputs.digest }}"

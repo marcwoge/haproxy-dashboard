@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="hero hero-admin">
+  <h1>Konfiguration</h1>
+  <p class="subtitle"><a href="/">← zurück zum Dashboard</a></p>
+</header>
+
+<main class="admin">
+
+  {# ----- Status-Banner (Validierung der HAProxy-Config) ----- #}
+  {% set v = validation %}
+  <div id="val-banner"
+       class="banner {{ 'banner-pending' if not v.is_current else ('banner-ok' if v.ok else 'banner-err') }}">
+    <span class="banner-dot"></span>
+    <span id="val-text">
+      {% if not v.is_current %}Validierung läuft … (HAProxy prüft die neue Config)
+      {% elif v.ok %}Konfiguration gültig und aktiv ✓
+      {% else %}Konfiguration abgelehnt – HAProxy läuft mit der letzten gültigen Version weiter ✗
+      {% endif %}
+    </span>
+    <pre id="val-message" class="banner-msg">{{ v.message if (v.is_current and not v.ok) else '' }}</pre>
+  </div>
+
+  {# ----- Update-Kanal ----- #}
+  <section class="card" id="updates">
+    <div class="log-head">
+      <h2>Updates</h2>
+      <div class="log-controls">
+        <span class="ver-badge">Version <b id="upd-current">{{ update.current }}</b></span>
+        {% if update.auto_update %}
+          <span class="ver-badge auto-on" title="Zeitplan: {{ update.auto_schedule or 'systemd-Timer' }}">
+            ⏱ Auto-Update aktiv{% if update.auto_schedule %} · {{ update.auto_schedule }}{% endif %}</span>
+        {% else %}
+          <span class="ver-badge auto-off" title="AUTO_UPDATE=false">⏱ Auto-Update aus</span>
+        {% endif %}
+        <form method="post" action="{{ url_for('admin_update_check') }}" style="margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost" type="submit">Nach Updates suchen</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="upd-body">
+      {% if update.error %}
+        <p class="upd-line upd-warn">⚠ {{ update.error }}</p>
+      {% elif update.update_available %}
+        <div class="banner banner-update">
+          <span class="banner-dot"></span>
+          <span>Update verfügbar: <b>{{ update.tag }}</b> (aktuell {{ update.current }})
+            {% if update.url %}– <a href="{{ update.url }}" target="_blank" rel="noopener">Release-Notes</a>{% endif %}
+          </span>
+        </div>
+        {% if update.mode == 'host-agent' %}
+          <form method="post" action="{{ url_for('admin_update_apply') }}" class="upd-apply"
+                onsubmit="return confirm('Update auf {{ update.tag }} anfordern? Der host-seitige Updater prüft die Signatur und startet mit Healthcheck/Rollback neu.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="target" value="{{ update.tag }}">
+            <label class="upd-confirm">Zur Bestätigung Zielversion eintippen (<code>{{ update.tag }}</code>):
+              <input name="confirm" autocomplete="off" placeholder="{{ update.tag }}" required>
+            </label>
+            <button class="btn" type="submit">Update anfordern</button>
+            <p class="upd-line upd-hint">Ausführung erfolgt außerhalb der App durch den host-seitigen Updater
+              (Signaturprüfung → Pull → Healthcheck → Rollback bei Fehler).</p>
+          </form>
+        {% else %}
+          <p class="upd-line">Automatik ist deaktiviert (<code>UPDATE_MODE=manual</code>). Zum Aktualisieren auf dem Server ausführen:</p>
+          <pre class="cmdbox">{{ update.manual_command }}</pre>
+        {% endif %}
+      {% else %}
+        <p class="upd-line upd-ok">✓ Du verwendest die aktuelle Version ({{ update.current }}).</p>
+      {% endif %}
+    </div>
+
+    {# Audit-Log der Update-Aktionen (append-only) #}
+    <details class="upd-audit">
+      <summary>Audit-Log</summary>
+      <pre id="upd-audit-box" class="logbox" style="height:150px;">{{ update_audit }}</pre>
+    </details>
+
+    {# Fortschritt/Ergebnis eines Ein-Klick-Updates (JS-aktualisiert) #}
+    <pre id="upd-log" class="logbox" style="height:180px; display:none;"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Services</h2>
+    <table class="svc-table">
+      <thead>
+        <tr><th></th><th>Status</th><th>Name</th><th>Pfad</th><th>Backend</th><th>Schema</th><th>SSL-Prüfung</th><th>Aktiv</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for s in services %}
+        {% set st = status_by_index.get(loop.index0) %}
+        <tr>
+          <td class="ic">{{ s.icon or '▣' }}</td>
+          <td><span class="dot dot-{{ st.dot if st else 'unknown' }}"
+                    id="st-{{ loop.index0 }}"
+                    title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
+          <td>{{ s.name }}</td>
+          <td><code>{{ s.path }}</code></td>
+          <td><code>{{ s.backend }}</code></td>
+          <td>{{ s.scheme or 'http' }}</td>
+          <td>{{ 'ja' if s.ssl_verify else 'nein' }}</td>
+          <td>{{ '✓' if s.enabled else '–' }}</td>
+          <td class="actions">
+            <a class="btn btn-sm" href="{{ url_for('admin', edit=loop.index0) }}">Bearbeiten</a>
+            <form method="post" action="{{ url_for('admin_service_delete') }}"
+                  onsubmit="return confirm('Service „{{ s.name }}“ wirklich löschen?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="index" value="{{ loop.index0 }}">
+              <button class="btn btn-sm btn-danger" type="submit">Löschen</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="muted">Noch keine Services.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if stats_error %}
+    <p class="hint">Backend-Status z. Zt. nicht abrufbar ({{ stats_error }}).</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>{{ 'Service bearbeiten' if edit_service else 'Service hinzufügen' }}</h2>
+    <form method="post" action="{{ url_for('admin_service') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if edit_idx is not none %}<input type="hidden" name="index" value="{{ edit_idx }}">{% endif %}
+      {% set e = edit_service or {} %}
+      <label>Name (Kachelbeschriftung)
+        <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
+      </label>
+      <label>Pfad
+        <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
+      </label>
+      <label>Backend (Container:Port oder Host:Port / IP:Port)
+        <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
+      </label>
+      <label>Schema (HAProxy → Backend)
+        <select name="scheme">
+          <option value="http" {{ 'selected' if (e.scheme or 'http')=='http' }}>http</option>
+          <option value="https" {{ 'selected' if e.scheme=='https' }}>https</option>
+        </select>
+      </label>
+      <label>Icon (Emoji oder Zeichen)
+        <input name="icon" value="{{ e.icon or '' }}" placeholder="🗑️">
+      </label>
+      <label>Kachelfarbe (optional)
+        <input name="color" type="text" value="{{ e.color or '' }}" placeholder="#22c55e">
+      </label>
+      <label class="full">Beschreibung (optional)
+        <input name="description" value="{{ e.description or '' }}" placeholder="Abfallmanagement-Anwendung">
+      </label>
+      <label class="check">
+        <input type="checkbox" name="ssl_verify" {{ 'checked' if e.ssl_verify }}>
+        SSL-Zertifikat des Backends prüfen (aus = nicht prüfen)
+      </label>
+      <label class="check">
+        <input type="checkbox" name="strip_path" {{ 'checked' if e.strip_path }}>
+        Pfad-Präfix vor Weiterleitung entfernen
+      </label>
+      <label class="check">
+        <input type="checkbox" name="enabled" {{ 'checked' if (e.enabled if edit_service else True) }}>
+        Aktiv
+      </label>
+      <div class="full form-actions">
+        <button class="btn" type="submit">Speichern</button>
+        {% if edit_service %}<a class="btn btn-ghost" href="{{ url_for('admin') }}">Abbrechen</a>{% endif %}
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Erscheinungsbild & Domain</h2>
+    <form method="post" action="{{ url_for('admin_theme') }}" class="form-grid"
+          enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Domain
+        <input name="domain" value="{{ cfg.domain }}" placeholder="platform.example.local">
+      </label>
+      <label>Titel
+        <input name="title" value="{{ theme.title }}">
+      </label>
+      <label>Untertitel
+        <input name="subtitle" value="{{ theme.subtitle }}">
+      </label>
+      <label>Kacheln pro Reihe
+        <input name="columns" type="number" min="1" max="8" value="{{ theme.columns }}">
+      </label>
+      <label>Hintergrund oben
+        <input name="background" type="color" value="{{ theme.background }}">
+      </label>
+      <label>Hintergrund unten
+        <input name="background2" type="color" value="{{ theme.background2 }}">
+      </label>
+      <label>Kachelfarbe
+        <input name="tile_color" type="color" value="{{ theme.tile_color }}">
+      </label>
+      <label>Kachel-Textfarbe
+        <input name="tile_text" type="color" value="{{ theme.tile_text }}">
+      </label>
+      <label>Akzentfarbe
+        <input name="accent" type="color" value="{{ theme.accent }}">
+      </label>
+
+      <label class="full">Logo hochladen (png, jpg, svg, gif, webp, ico)
+        <input name="logo_file" type="file" accept="image/*">
+      </label>
+      {% if logo_url %}
+      <div class="logo-preview">
+        <span>Aktuelles Logo:</span>
+        <img src="{{ logo_url }}" alt="Logo" style="height: 40px;">
+        <label class="check">
+          <input type="checkbox" name="remove_logo"> entfernen
+        </label>
+      </div>
+      {% endif %}
+      <label>Logo-Höhe (px)
+        <input name="logo_height" type="number" min="16" max="400" value="{{ theme.logo_height }}">
+      </label>
+
+      <div class="full form-actions">
+        <button class="btn" type="submit">Erscheinungsbild speichern</button>
+      </div>
+    </form>
+  </section>
+
+  <p class="hint">Änderungen werden sofort gespeichert; HAProxy übernimmt neue
+    Routen automatisch innerhalb weniger Sekunden.</p>
+
+  <section class="card">
+    <div class="log-head">
+      <h2>Logs</h2>
+      <div class="log-controls">
+        <select id="log-which">
+          <option value="haproxy">HAProxy</option>
+          <option value="app">config-app</option>
+        </select>
+        <select id="log-lines">
+          <option value="100">100 Zeilen</option>
+          <option value="200" selected>200 Zeilen</option>
+          <option value="500">500 Zeilen</option>
+        </select>
+        <label class="check"><input type="checkbox" id="log-auto" checked> Auto-Refresh</label>
+        <button class="btn btn-sm btn-ghost" id="log-refresh" type="button">Neu laden</button>
+      </div>
+    </div>
+    <pre id="logbox" class="logbox">Lade …</pre>
+  </section>
+
+</main>
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% endblock %}

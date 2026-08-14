@@ -1,0 +1,14 @@
+[Unit]
+Description=Acme auto-update check (schreibt bei neuem Release eine Anforderung)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-__PROJECT_DIR__/.env
+Environment=PROJECT_DIR=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/updater/check-latest.sh
+User=root
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full

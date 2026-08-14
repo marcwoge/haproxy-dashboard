@@ -1,0 +1,10 @@
+# Repo-intern immer LF. Verhindert, dass Shell-Skripte / Container-Dateien
+# auf Windows mit CRLF ausgecheckt werden (sonst bricht z. B. entrypoint.sh).
+* text=auto eol=lf
+
+# Sicherheitshalber explizit fuer alles, was in den Containern laeuft:
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf

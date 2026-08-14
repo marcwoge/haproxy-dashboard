@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="hero">
+  {% if logo_url %}
+  <img class="hero-logo" src="{{ logo_url }}" alt="{{ theme.title }}"
+       style="height: {{ theme.logo_height }}px;">
+  {% endif %}
+  <h1>{{ theme.title }}</h1>
+  <p class="subtitle">{{ theme.subtitle }}</p>
+</header>
+
+<main class="grid">
+  {% for s in services %}
+  <a class="tile" href="{{ s.path }}" style="--tile-bg: {{ s.color or theme.tile_color }};">
+    <div class="tile-icon">{{ s.icon or '▣' }}</div>
+    <div class="tile-name">{{ s.name }}</div>
+    {% if s.description %}<div class="tile-desc">{{ s.description }}</div>{% endif %}
+    <div class="tile-path">{{ s.path }}</div>
+  </a>
+  {% else %}
+  <div class="empty">Noch keine Services konfiguriert. Lege welche im
+    <a href="/admin">Admin-Bereich</a> an.</div>
+  {% endfor %}
+</main>
+
+<footer class="footer">
+  <a href="/admin" class="admin-link">⚙ Konfiguration</a>
+</footer>
+{% endblock %}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Acme host-side updater (verify -> pull -> up -> healthcheck -> rollback)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# .env liefert UPDATE_REPO, PLATFORM_DOMAIN, VERIFY_SIGNATURES, GHCR-Infos ...
+EnvironmentFile=-__PROJECT_DIR__/.env
+Environment=PROJECT_DIR=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/updater/host-updater.sh
+# Laeuft als root (Docker-Zugriff), aber gehaertet:
+User=root
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
