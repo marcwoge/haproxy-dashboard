@@ -14,6 +14,9 @@ services:
       - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-5}
       - LOGIN_WINDOW=${LOGIN_WINDOW:-300}
       - LOGIN_LOCKOUT=${LOGIN_LOCKOUT:-300}
+      # HSTS (N2) - nur mit echtem Zertifikat aktivieren
+      - ENABLE_HSTS=${ENABLE_HSTS:-false}
+      - HSTS_MAX_AGE=${HSTS_MAX_AGE:-31536000}
       # Getrennte, hoehere Rolle fuer system.update (RBAC). Leer = faellt auf Admin zurueck.
       - PLATFORM_ADMIN_USER=${PLATFORM_ADMIN_USER:-}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-}

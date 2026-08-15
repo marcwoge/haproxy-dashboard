@@ -1,5 +1,6 @@
 """Erzeugt eine haproxy.cfg aus der services.yaml-Konfiguration."""
 import ipaddress
+import os
 import re
 
 # Pfad zum kombinierten PEM IM haproxy-Container (siehe entrypoint.sh)
@@ -7,6 +8,19 @@ CERT_PEM = "/usr/local/etc/haproxy/platform.pem"
 
 # Interner Stats-Port (nur im Docker-Netz erreichbar, NICHT auf dem Host)
 STATS_PORT = 8404
+
+# N2: HSTS ist OPT-IN (Env), weil es mit dem selbstsignierten Fallback-Zertifikat
+# den Zugriff dauerhaft sperren wuerde. Nur mit echtem Zertifikat aktivieren.
+HSTS_ENABLED = os.environ.get("ENABLE_HSTS", "false").lower() == "true"
+HSTS_MAX_AGE = os.environ.get("HSTS_MAX_AGE", "31536000")
+
+# N2: moderne TLS-Einstellungen (Mozilla "intermediate"), min. TLS 1.2.
+TLS_CIPHERS = ("ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:"
+               "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:"
+               "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:"
+               "DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384")
+TLS_CIPHERSUITES = ("TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:"
+                    "TLS_CHACHA20_POLY1305_SHA256")
 
 
 def _is_ip(host: str) -> bool:
@@ -76,6 +90,10 @@ def render(config: dict) -> str:
     A("    log stdout format raw local0")
     A("    maxconn 4096")
     A("    tune.ssl.default-dh-param 2048")
+    A("    # N2: moderne TLS-Defaults, min. TLS 1.2")
+    A(f"    ssl-default-bind-ciphers {TLS_CIPHERS}")
+    A(f"    ssl-default-bind-ciphersuites {TLS_CIPHERSUITES}")
+    A("    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets")
     A("")
     A("defaults")
     A("    log global")
@@ -115,6 +133,9 @@ def render(config: dict) -> str:
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
     # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
     A("    http-request set-header X-Client-IP %[src]")
+    if HSTS_ENABLED:
+        # N2: HSTS nur bei echtem Zertifikat (opt-in via ENABLE_HSTS=true).
+        A(f'    http-response set-header Strict-Transport-Security "max-age={HSTS_MAX_AGE}; includeSubDomains"')
     A("")
 
     backends = []

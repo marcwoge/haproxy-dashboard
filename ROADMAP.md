@@ -54,8 +54,9 @@
 - [ ] Audit-Log-Integrität: App- vom Host-Audit trennen, append-only erzwingen — M7
 
 **Niedrig**
-- [ ] SVG-Logo-Upload absichern (sanitizen / `Content-Disposition` / CSP) — N1
-- [ ] TLS-Härtung: `ssl-min-ver TLSv1.2`, moderne Ciphers, HSTS-Header — N2
+- [x] SVG-Logo-Upload absichern: aktive Inhalte abgelehnt + `/logo` mit CSP `sandbox`
+      und `X-Content-Type-Options: nosniff` — N1
+- [x] TLS-Härtung: `ssl-min-ver TLSv1.2`, moderne Ciphers/Ciphersuites, HSTS (opt-in) — N2
 - [ ] Interne Stats-Schnittstelle (`:8404`) mit Auth / lokal binden — N3
 - [ ] Generische Fehlermeldungen im GUI (Details nur ins Log) — N4
 - [ ] Selbstsigniertes Zertifikat persistieren (nicht bei jedem Neustart neu) — N5

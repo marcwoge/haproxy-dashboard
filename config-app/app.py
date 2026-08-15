@@ -134,6 +134,14 @@ DEFAULT_THEME = {
 
 ALLOWED_LOGO_EXT = {".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp", ".ico"}
 
+# N1: SVGs koennen aktives XSS enthalten. Uploads mit diesen Mustern ablehnen.
+_SVG_DANGER = re.compile(
+    rb"<script|javascript:|<!entity|<foreignobject|\son[a-z]+\s*=", re.IGNORECASE)
+
+
+def _svg_is_safe(data: bytes) -> bool:
+    return _SVG_DANGER.search(data or b"") is None
+
 def _load_secret_key() -> str:
     """SECRET_KEY aus Secret/Env, sonst persistent generieren (kein hartkodierter Default)."""
     env = _secret("SECRET_KEY")
@@ -531,7 +539,12 @@ def logo():
     path = CONFIG_DIR / fname
     if not path.exists():
         abort(404)
-    return send_file(path)
+    resp = send_file(path)
+    # N1: hochgeladene Logos (v. a. SVG) abgesichert ausliefern - verhindert
+    # Stored-XSS, falls jemand /logo direkt aufruft. sandbox neutralisiert Skripte.
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    return resp
 
 
 @app.route("/healthz")
@@ -715,16 +728,20 @@ def admin_theme():
         theme["logo"] = ""
     elif upload and upload.filename:
         ext = os.path.splitext(upload.filename)[1].lower()
-        if ext in ALLOWED_LOGO_EXT:
+        data = upload.read()
+        if ext not in ALLOWED_LOGO_EXT:
+            flash("Logo-Format nicht unterstuetzt (erlaubt: png, jpg, svg, gif, webp, ico).", "error")
+        elif ext == ".svg" and not _svg_is_safe(data):
+            _log.warning("SVG-Upload abgelehnt (aktive Inhalte)")
+            flash("SVG abgelehnt: enthält Skripte/Event-Handler (mögliches XSS).", "error")
+        else:
             old = theme.get("logo")
             if old and old != f"logo{ext}" and (CONFIG_DIR / old).exists():
                 (CONFIG_DIR / old).unlink()
             fname = f"logo{ext}"
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            upload.save(CONFIG_DIR / fname)
+            (CONFIG_DIR / fname).write_bytes(data)
             theme["logo"] = fname
-        else:
-            flash("Logo-Format nicht unterstuetzt (erlaubt: png, jpg, svg, gif, webp, ico).", "error")
 
     cfg["theme"] = theme
     save_config(cfg)
