@@ -17,12 +17,15 @@ UPDATE_DIR="$PROJECT_DIR/data/update"
 
 echo "[install] Projektverzeichnis: $PROJECT_DIR"
 
-# 1) Update-Verzeichnis + append-only Audit-Log vorbereiten
+# 1) Update-Verzeichnis + append-only HOST-Audit-Log vorbereiten (M7).
+#    Das Host-Audit ist die massgebliche, manipulationsgeschuetzte Spur:
+#    Nur der host-seitige Updater schreibt es. Dank chattr +a kann selbst der
+#    (cap_drop ALL) config-app-Container es weder umschreiben noch loeschen.
 mkdir -p "$UPDATE_DIR"
-touch "$UPDATE_DIR/audit.log"
+touch "$UPDATE_DIR/host-audit.log"
 if command -v chattr >/dev/null 2>&1; then
-    chattr +a "$UPDATE_DIR/audit.log" 2>/dev/null \
-        && echo "[install] audit.log auf append-only (chattr +a) gesetzt" \
+    chattr +a "$UPDATE_DIR/host-audit.log" 2>/dev/null \
+        && echo "[install] host-audit.log auf append-only (chattr +a) gesetzt" \
         || echo "[install] WARN: chattr +a nicht moeglich (Dateisystem?)"
 fi
 

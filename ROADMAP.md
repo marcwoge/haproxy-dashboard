@@ -50,8 +50,9 @@
 - [x] `SECRET_KEY` erzwingen statt hartkodiertem Default (persistent generiert) — M3
 - [x] Secrets via Docker/Compose *secrets* statt `environment:` (opt-in, `*_FILE`) — M4
 - [x] `waitress >= 3.0.1` (CVE-Fixes) — auf 3.0.2 angehoben — M5
-- [ ] Backend-SSL-Default auf `verify required` (statt `verify none`) — M6
-- [ ] Audit-Log-Integrität: App- vom Host-Audit trennen, append-only erzwingen — M7
+- [x] Backend-SSL-Default `verify required` (GUI-Checkbox default an, Warnung bei „none") — M6
+- [x] Audit-Log-Integrität: App-Audit (`app-audit.log`) vom Host-Audit (`host-audit.log`,
+      append-only via `chattr +a`, vom cap_drop-Container nicht umschreibbar) getrennt — M7
 
 **Niedrig**
 - [x] SVG-Logo-Upload absichern: aktive Inhalte abgelehnt + `/logo` mit CSP `sandbox`

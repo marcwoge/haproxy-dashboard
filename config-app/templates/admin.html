@@ -152,9 +152,12 @@
         <input name="description" value="{{ e.description or '' }}" placeholder="Abfallmanagement-Anwendung">
       </label>
       <label class="check">
-        <input type="checkbox" name="ssl_verify" {{ 'checked' if e.ssl_verify }}>
-        SSL-Zertifikat des Backends prüfen (aus = nicht prüfen)
+        <input type="checkbox" name="ssl_verify" {{ 'checked' if (e.ssl_verify if edit_service else True) }}>
+        SSL-Zertifikat des Backends prüfen <em>(empfohlen)</em>
       </label>
+      <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">
+        ⚠ Nur abschalten, wenn das Backend ein selbstsigniertes Zertifikat nutzt –
+        ohne Prüfung ist die Verbindung zum Backend gegen MITM angreifbar (nur bei https relevant).</p>
       <label class="check">
         <input type="checkbox" name="strip_path" {{ 'checked' if e.strip_path }}>
         Pfad-Präfix vor Weiterleitung entfernen

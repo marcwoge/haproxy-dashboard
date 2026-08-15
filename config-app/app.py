@@ -688,6 +688,11 @@ def admin_service():
         _log.warning("Service abgelehnt (Validierung): %r", {k: svc.get(k) for k in ("name", "path", "backend")})
         return redirect(url_for("admin"))
 
+    # M6: Hinweis, wenn https-Backend OHNE Zertifikatspruefung gespeichert wird.
+    if svc["scheme"] == "https" and not svc["ssl_verify"]:
+        flash(f"Achtung: „{svc['name']}“ nutzt https OHNE Zertifikatsprüfung (MITM möglich).", "error")
+        _log.warning("Service %s: https mit verify none", svc["name"])
+
     idx = request.form.get("index", "")
     if idx.isdigit() and int(idx) < len(cfg["services"]):
         cfg["services"][int(idx)] = svc

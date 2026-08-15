@@ -37,7 +37,12 @@ UPDATE_DIR = Path(os.environ.get("UPDATE_DIR", "/app/update"))
 CHECK_FILE = UPDATE_DIR / "check.json"
 REQUEST_FILE = UPDATE_DIR / "request.json"
 RESULT_FILE = UPDATE_DIR / "result.json"
-AUDIT_LOG = UPDATE_DIR / "audit.log"
+# M7: App-Audit (Container, weniger vertrauenswuerdig) getrennt vom Host-Audit.
+# Der Host-Updater schreibt in host-audit.log (append-only via chattr +a); der
+# Container kann es dank cap_drop ALL nicht umschreiben/loeschen, nur die App
+# schreibt in app-audit.log. Fuers GUI werden beide zusammengefuehrt (nur Lesen).
+AUDIT_LOG = UPDATE_DIR / "app-audit.log"
+HOST_AUDIT_LOG = UPDATE_DIR / "host-audit.log"
 CACHE_TTL = int(os.environ.get("UPDATE_CHECK_TTL", "21600"))  # 6 h
 
 MANUAL_COMMAND = "docker compose pull && docker compose up -d"
@@ -148,11 +153,18 @@ def request_update(target: str, actor: str) -> None:
 
 
 def read_audit(lines: int = 50) -> str:
-    try:
-        with open(AUDIT_LOG, "r", encoding="utf-8", errors="replace") as f:
-            return "".join(f.readlines()[-lines:])
-    except OSError:
+    """Fuehrt App- und Host-Audit fuers GUI zusammen (nach Zeitstempel sortiert)."""
+    entries = []
+    for path in (AUDIT_LOG, HOST_AUDIT_LOG):
+        try:
+            entries += path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            pass
+    if not entries:
         return "(noch keine Audit-Einträge)"
+    # Zeilen beginnen mit ISO-Zeitstempel -> lexikografische Sortierung = chronologisch.
+    entries.sort()
+    return "\n".join(entries[-lines:])
 
 
 def update_state() -> dict:

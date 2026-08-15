@@ -17,7 +17,7 @@ set -uo pipefail
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 UPDATE_DIR="${UPDATE_DIR:-$PROJECT_DIR/data/update}"
 REQ="$UPDATE_DIR/request.json"
-AUDIT="$UPDATE_DIR/audit.log"
+AUDIT="$UPDATE_DIR/host-audit.log"
 SKIP="$UPDATE_DIR/auto-skip"
 
 AUTO_UPDATE="${AUTO_UPDATE:-false}"
@@ -66,6 +66,11 @@ else
 fi
 
 [ -n "$latest" ] || { audit "SKIP kein Release gefunden"; exit 0; }
+
+# H3: gelieferten Tag validieren, bevor er in eine Anforderung geschrieben wird.
+if ! printf '%s' "$latest" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'; then
+    audit "SKIP ungueltiger Tag von der API: $(printf %q "$latest")"; exit 0
+fi
 
 if ! is_newer "$latest" "$current"; then
     audit "OK aktuell (laufend=$current, neuestes=$latest)"; exit 0

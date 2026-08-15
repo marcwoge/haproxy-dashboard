@@ -20,7 +20,7 @@ UPDATE_DIR="${UPDATE_DIR:-$PROJECT_DIR/data/update}"
 ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env}"
 REQ="$UPDATE_DIR/request.json"
 RES="$UPDATE_DIR/result.json"
-AUDIT="$UPDATE_DIR/audit.log"
+AUDIT="$UPDATE_DIR/host-audit.log"
 
 UPDATE_REPO="${UPDATE_REPO:-your-org/haproxy-dashboard}"
 DOMAIN="${PLATFORM_DOMAIN:-platform.example.local}"
@@ -66,6 +66,14 @@ TARGET="$(sed -n 's/.*"target"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REQ
 REQBY="$(sed -n 's/.*"requested_by"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REQ")"
 [ -n "$TARGET" ] || TARGET="latest"
 rm -f "$REQ"   # Anforderung entgegengenommen
+
+# H3: Ziel-Tag strikt validieren (Docker-Tag-Zeichensatz). Verhindert Injection
+# in nachfolgende `docker`-/sed-Aufrufe (z. B. IMAGE_TAG in .env). Fail-closed.
+if ! printf '%s' "$TARGET" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'; then
+    audit "TARGET_INVALID target=$(printf %q "$TARGET") -> Abbruch"
+    result "failed" "invalid-target"
+    exit 1
+fi
 
 export IMAGE_TAG="$TARGET"
 CONFIG_REF="ghcr.io/${UPDATE_REPO}/config-app:${TARGET}"
