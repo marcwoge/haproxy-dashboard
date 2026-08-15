@@ -243,6 +243,71 @@
   <p class="hint">Änderungen werden sofort gespeichert; HAProxy übernimmt neue
     Routen automatisch innerhalb weniger Sekunden.</p>
 
+  {# ----- Benachrichtigungen ----- #}
+  <section class="card" id="notify">
+    <h2>Benachrichtigungen</h2>
+    {% set nf = cfg.notifications %}
+    <form method="post" action="{{ url_for('admin_notify') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="check full">
+        <input type="checkbox" name="enabled" {{ 'checked' if nf.enabled }}>
+        Benachrichtigungen aktiv
+      </label>
+
+      <label class="full"><b>Ereignisse</b></label>
+      <label class="check"><input type="checkbox" name="ev_update_available" {{ 'checked' if nf.events.update_available }}> Update verfügbar</label>
+      <label class="check"><input type="checkbox" name="ev_update_result" {{ 'checked' if nf.events.update_result }}> Update-Ergebnis</label>
+      <label class="check"><input type="checkbox" name="ev_backend_down" {{ 'checked' if nf.events.backend_down }}> Backend DOWN</label>
+
+      <label class="full"><b>E-Mail</b></label>
+      <label>Versandart
+        <select name="email_mode">
+          <option value="smtp" {{ 'selected' if nf.email_mode=='smtp' }}>SMTP-Host (Relay, empfohlen)</option>
+          <option value="direct" {{ 'selected' if nf.email_mode=='direct' }}>Direktversand (Server stellt selbst zu)</option>
+        </select>
+      </label>
+      <label>Empfänger (kommagetrennt)
+        <input name="to_addrs" value="{{ nf.to_addrs }}" placeholder="admin@example.com">
+      </label>
+      <label>Absender (From)
+        <input name="from_addr" value="{{ nf.from_addr }}" placeholder="dashboard@example.com">
+      </label>
+      <label>SMTP-Host <span class="upd-hint">(nur bei „SMTP-Host")</span>
+        <input name="smtp_host" value="{{ nf.smtp_host }}" placeholder="smtp.example.com">
+      </label>
+      <label>SMTP-Port
+        <input name="smtp_port" type="number" min="1" max="65535" value="{{ nf.smtp_port }}">
+      </label>
+      <label>Sicherheit
+        <select name="smtp_security">
+          <option value="starttls" {{ 'selected' if nf.smtp_security=='starttls' }}>STARTTLS</option>
+          <option value="ssl" {{ 'selected' if nf.smtp_security=='ssl' }}>SSL/TLS</option>
+          <option value="none" {{ 'selected' if nf.smtp_security=='none' }}>keine</option>
+        </select>
+      </label>
+      <label>SMTP-Benutzer
+        <input name="smtp_user" value="{{ nf.smtp_user }}" autocomplete="off">
+      </label>
+      <label>SMTP-Passwort
+        <input name="smtp_password" type="password" autocomplete="new-password"
+               placeholder="{{ '•••••• (gesetzt – leer = unverändert)' if nf.smtp_password else '' }}">
+      </label>
+
+      <label class="full"><b>Webhook</b> (optional)</label>
+      <label class="full">Webhook-URL (POST JSON bei jedem Ereignis)
+        <input name="webhook_url" value="{{ nf.webhook_url }}" placeholder="https://hooks.example.com/…">
+      </label>
+
+      <div class="full form-actions">
+        <button class="btn" type="submit">Speichern</button>
+        <button class="btn btn-ghost" type="submit" formaction="{{ url_for('admin_notify_test') }}">Testnachricht senden</button>
+      </div>
+      <p class="upd-hint full">Direktversand ist bequem, wird aber oft von Providern
+        (Port 25 gesperrt) oder Spam-Filtern (fehlendes PTR/SPF/DKIM) blockiert –
+        für zuverlässige Zustellung einen SMTP-Host verwenden.</p>
+    </form>
+  </section>
+
   <section class="card">
     <div class="log-head">
       <h2>Logs</h2>

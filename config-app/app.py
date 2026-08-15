@@ -8,6 +8,7 @@ import base64
 import csv
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
@@ -27,6 +28,7 @@ from waitress import serve
 
 from haproxy_render import render as render_haproxy, _norm_path, _safe_id
 import updater
+import notifier
 
 CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/app/config"))
 CONFIG_FILE = CONFIG_DIR / "services.yaml"
@@ -136,6 +138,21 @@ DEFAULT_THEME = {
 
 ALLOWED_LOGO_EXT = {".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp", ".ico"}
 
+DEFAULT_NOTIFICATIONS = {
+    "enabled": False,
+    "email_mode": "smtp",         # "smtp" (Relay) | "direct" (Selbstversand via MX)
+    "from_addr": "",
+    "to_addrs": "",               # kommagetrennt
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password": "",          # sensibel - im GUI nie zurueckgegeben
+    "smtp_security": "starttls",  # starttls | ssl | none
+    "webhook_url": "",
+    "events": {"update_available": True, "update_result": True, "backend_down": True},
+}
+NOTIFY_INTERVAL = int(os.environ.get("NOTIFY_INTERVAL", "60"))
+
 # N1: SVGs koennen aktives XSS enthalten. Uploads mit diesen Mustern ablehnen.
 _SVG_DANGER = re.compile(
     rb"<script|javascript:|<!entity|<foreignobject|\son[a-z]+\s*=", re.IGNORECASE)
@@ -236,6 +253,13 @@ def load_config() -> dict:
     theme.update(cfg.get("theme") or {})
     cfg["theme"] = theme
     cfg.setdefault("services", [])
+    notif = dict(DEFAULT_NOTIFICATIONS)
+    stored = cfg.get("notifications") or {}
+    events = dict(DEFAULT_NOTIFICATIONS["events"])
+    events.update(stored.get("events") or {})
+    notif.update(stored)
+    notif["events"] = events
+    cfg["notifications"] = notif
     return cfg
 
 
@@ -737,6 +761,54 @@ def admin_update_rollback():
     return redirect(url_for("admin") + "#updates")
 
 
+# ----------------------------------------------------------------------------
+# Benachrichtigungen (E-Mail / Webhook)
+# ----------------------------------------------------------------------------
+@app.route("/admin/notify", methods=["POST"])
+@requires_auth
+def admin_notify():
+    cfg = load_config()
+    n = cfg["notifications"]
+    f = request.form
+    n["enabled"] = f.get("enabled") == "on"
+    n["email_mode"] = f.get("email_mode", "smtp")
+    n["from_addr"] = f.get("from_addr", "").strip()
+    n["to_addrs"] = f.get("to_addrs", "").strip()
+    n["smtp_host"] = f.get("smtp_host", "").strip()
+    try:
+        n["smtp_port"] = max(1, min(65535, int(f.get("smtp_port") or 587)))
+    except ValueError:
+        n["smtp_port"] = 587
+    n["smtp_user"] = f.get("smtp_user", "").strip()
+    pw = f.get("smtp_password", "")
+    if pw:                       # nur ueberschreiben, wenn neu eingegeben
+        n["smtp_password"] = pw
+    n["smtp_security"] = f.get("smtp_security", "starttls")
+    n["webhook_url"] = f.get("webhook_url", "").strip()
+    n["events"] = {
+        "update_available": f.get("ev_update_available") == "on",
+        "update_result": f.get("ev_update_result") == "on",
+        "backend_down": f.get("ev_backend_down") == "on",
+    }
+    save_config(cfg)
+    flash("Benachrichtigungen gespeichert.", "ok")
+    return redirect(url_for("admin") + "#notify")
+
+
+@app.route("/admin/notify/test", methods=["POST"])
+@requires_auth
+def admin_notify_test():
+    n = load_config()["notifications"]
+    results = notifier.dispatch(n, "test", "Testbenachrichtigung",
+                                "Dies ist eine Testnachricht des HAProxy-Dashboards.",
+                                {"test": True})
+    if not results:
+        flash("Kein Kanal konfiguriert (E-Mail-Empfänger/SMTP oder Webhook fehlt).", "error")
+    for channel, ok, msg in results:
+        flash(f"Test {channel}: {'OK' if ok else 'Fehler – ' + msg}", "ok" if ok else "error")
+    return redirect(url_for("admin") + "#notify")
+
+
 @app.route("/admin/service", methods=["POST"])
 @requires_auth
 def admin_service():
@@ -834,9 +906,87 @@ def admin_theme():
     return redirect(url_for("admin"))
 
 
+# ----------------------------------------------------------------------------
+# Benachrichtigungs-Monitor (Hintergrund-Thread): erkennt Ereignisse und meldet.
+# ----------------------------------------------------------------------------
+NOTIFY_STATE = CONFIG_DIR / ".notify_state.json"
+
+
+def _notify_state_load() -> dict:
+    try:
+        return json.loads(NOTIFY_STATE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _notify_state_save(state: dict) -> None:
+    try:
+        NOTIFY_STATE.write_text(json.dumps(state), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _fire(n: dict, event: str, subject: str, body: str, payload: dict) -> None:
+    for channel, ok, msg in notifier.dispatch(n, event, subject, body, payload):
+        if ok:
+            _log.info("Benachrichtigung (%s) gesendet: %s", channel, subject)
+        else:
+            _log.warning("Benachrichtigung (%s) fehlgeschlagen: %s", channel, msg)
+
+
+def _notify_monitor() -> None:
+    state = _notify_state_load()
+    down_baselined = False
+    down = set()
+    while True:
+        time.sleep(NOTIFY_INTERVAL)
+        try:
+            cfg = load_config()
+            n = cfg["notifications"]
+            if not n.get("enabled"):
+                down_baselined, down = False, set()
+                continue
+
+            # 1) Update verfuegbar (einmal je Version)
+            chk = updater.check(force=False)
+            tag = chk.get("tag")
+            if chk.get("update_available") and tag and state.get("notified_version") != tag:
+                _fire(n, "update_available", f"Update verfügbar: {tag}",
+                      f"Version {tag} steht bereit (laufend: {chk.get('current')}).",
+                      {"version": tag, "current": chk.get("current")})
+                state["notified_version"] = tag
+                _notify_state_save(state)
+
+            # 2) Update-Ergebnis (einmal je Ergebnis)
+            res = updater.update_state().get("result")
+            if res and res.get("ts") and state.get("result_ts") != res.get("ts"):
+                st = res.get("state")
+                _fire(n, "update_result", f"Update-Ergebnis: {st}",
+                      f"Der host-seitige Updater meldet „{st}“ (Detail: {res.get('detail', '')}).",
+                      {"result": res})
+                state["result_ts"] = res.get("ts")
+                _notify_state_save(state)
+
+            # 3) Backend DOWN (bei Uebergang; erste Runde ist Baseline)
+            states, _ = _service_states(cfg)
+            names = {i: s.get("name") for i, s in enumerate(cfg["services"])}
+            now_down = {st["index"] for st in states if st["dot"] == "down"}
+            if not down_baselined:
+                down, down_baselined = now_down, True
+            else:
+                for idx in now_down - down:
+                    _fire(n, "backend_down", f"Backend DOWN: {names.get(idx)}",
+                          f"Der Service „{names.get(idx)}“ ist nicht erreichbar (DOWN).",
+                          {"service": names.get(idx)})
+                down = now_down
+        except Exception as e:  # noqa: BLE001
+            _log.warning("Notify-Monitor: %s", e)
+
+
 if __name__ == "__main__":
     # Beim Start einmal alles erzeugen, damit haproxy sofort eine Config hat.
     regenerate(load_config())
     check_admin_password()
+    threading.Thread(target=_notify_monitor, name="notify-monitor", daemon=True).start()
     _log.info("config-app gestartet, bereit auf :5000")
     serve(app, host="0.0.0.0", port=5000)

@@ -18,6 +18,23 @@ theme:
   logo_height: 64            # Anzeigehoehe des Logos in Pixeln
   show_status: true          # Backend-Status (UP/DOWN) auf dem Dashboard anzeigen
 
+# Benachrichtigungen (E-Mail/Webhook) - am einfachsten im Admin-GUI konfigurieren.
+notifications:
+  enabled: false
+  email_mode: smtp           # smtp (Relay ueber Host) | direct (Selbstversand via MX)
+  from_addr: ""
+  to_addrs: ""               # kommagetrennte Empfaenger
+  smtp_host: ""
+  smtp_port: 587
+  smtp_user: ""
+  smtp_password: ""
+  smtp_security: starttls    # starttls | ssl | none
+  webhook_url: ""
+  events:
+    update_available: true
+    update_result: true
+    backend_down: true
+
 services:
   - name: "Example Service"
     path: "/example"

@@ -152,6 +152,21 @@ Das Admin-GUI aktualisiert sich live (Polling alle ~3 s):
   Auto-Refresh. Beide Logs werden zusätzlich in Dateien unter `data\haproxy\`
   geschrieben (mit Rotation) und sind weiterhin über `docker compose logs` sichtbar.
 
+### Benachrichtigungen (E-Mail / Webhook)
+
+Unter **Admin → Benachrichtigungen** konfigurierbar. Ausgelöst bei *Update
+verfügbar*, *Update-Ergebnis* und *Backend DOWN* (je abschaltbar). Ein
+Hintergrund-Monitor erkennt die Ereignisse und meldet einmalig pro Ereignis.
+
+- **E-Mail – SMTP-Host** (empfohlen): Versand über einen Relay-Server (STARTTLS/SSL,
+  Auth). Zuverlässig.
+- **E-Mail – Direktversand**: der Server macht selbst MX-Lookup und stellt über
+  Port 25 zu – bequem, aber oft von Providern (Port 25 gesperrt) bzw. Spam-Filtern
+  (fehlendes PTR/SPF/DKIM) blockiert.
+- **Webhook**: POST eines JSON-Payloads pro Ereignis an eine frei wählbare URL.
+
+Mit „Testnachricht senden" lässt sich die Konfiguration sofort prüfen.
+
 ---
 
 ## 6. Architektur

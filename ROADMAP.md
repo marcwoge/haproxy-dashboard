@@ -25,7 +25,8 @@
       mit Signaturprüfung/Healthcheck/Rollback und Rollback-Schleifen-Schutz (auto-skip)
 - [x] Backend-Status auch auf dem Dashboard (Status-Punkt je Kachel, live + Toggle) 
 - [x] Rollback auf vorherige Version per Klick (Admin-Knopf, host-agent, gleicher sicherer Pfad)
-- [ ] Health-/Update-Benachrichtigung per E-Mail/Webhook
+- [x] Health-/Update-Benachrichtigung per E-Mail/Webhook (SMTP-Relay ODER
+      Direktversand via MX, + Webhook; Ereignisse einzeln schaltbar, im Admin)
 
 ## Sicherheit & Härtung (aus Security-Audit)
 
