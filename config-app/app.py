@@ -617,6 +617,8 @@ def admin():
         edit_service = cfg["services"][int(edit_idx)]
     states, stats_error = _service_states(cfg)
     status_by_index = {st["index"]: st for st in states}
+    update_info = updater.check(force=False)
+    update_info["previous"] = updater.previous_version()   # live, nicht gecacht
     return render_template(
         "admin.html",
         cfg=cfg,
@@ -628,7 +630,7 @@ def admin():
         validation=read_validation_status(),
         status_by_index=status_by_index,
         stats_error=stats_error,
-        update=updater.check(force=False),
+        update=update_info,
         update_audit=updater.read_audit(40),
     )
 
@@ -710,6 +712,28 @@ def admin_update_apply():
     _log.info("Update angefordert von %s (Ziel: %s)", actor, target)
     flash(f"Update auf {target} angefordert – der host-seitige Updater prüft Signatur, "
           f"lädt die Images und startet mit Healthcheck/Rollback neu …", "ok")
+    return redirect(url_for("admin") + "#updates")
+
+
+@app.route("/admin/update/rollback", methods=["POST"])
+@requires_platform_admin
+def admin_update_rollback():
+    if updater.MODE != "host-agent":
+        flash("Rollback per Klick ist nur mit UPDATE_MODE=host-agent möglich.", "error")
+        return redirect(url_for("admin") + "#updates")
+    actor = _current_actor()
+    target = updater.previous_version()
+    if not target:
+        flash("Keine vorherige Version bekannt – Rollback nicht möglich.", "error")
+        return redirect(url_for("admin") + "#updates")
+    if not _RE_TARGET.match(target):
+        updater.audit(actor, "ROLLBACK_TARGET_INVALID", f"target={target!r}")
+        flash("Vorherige Version ist ungültig – Rollback abgebrochen.", "error")
+        return redirect(url_for("admin") + "#updates")
+    updater.request_rollback(target, actor)
+    _log.info("Rollback angefordert von %s (Ziel: %s)", actor, target)
+    flash(f"Rollback auf {target} angefordert – der host-seitige Updater prüft Signatur, "
+          f"lädt die Images und startet mit Healthcheck neu …", "ok")
     return redirect(url_for("admin") + "#updates")
 
 

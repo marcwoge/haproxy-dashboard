@@ -37,6 +37,14 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-ghost" type="submit">Nach Updates suchen</button>
         </form>
+        {% if update.mode == 'host-agent' and update.previous %}
+        <form method="post" action="{{ url_for('admin_update_rollback') }}" style="margin:0"
+              onsubmit="return confirm('Rollback auf {{ update.previous }}? Die Container werden neu gestartet.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-ghost" type="submit"
+                  title="Auf die zuletzt laufende Version zurück">↩ Rollback auf {{ update.previous }}</button>
+        </form>
+        {% endif %}
       </div>
     </div>
 
@@ -131,10 +139,10 @@
         <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
       </label>
       <label>Pfad
-        <input name="path" required value="{{ e.path or '' }}" placeholder="/example">
+        <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
       </label>
       <label>Backend (Container:Port oder Host:Port / IP:Port)
-        <input name="backend" value="{{ e.backend or '' }}" placeholder="example:8080">
+        <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
       </label>
       <label>Schema (HAProxy → Backend)
         <select name="scheme">

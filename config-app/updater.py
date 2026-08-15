@@ -37,6 +37,7 @@ UPDATE_DIR = Path(os.environ.get("UPDATE_DIR", "/app/update"))
 CHECK_FILE = UPDATE_DIR / "check.json"
 REQUEST_FILE = UPDATE_DIR / "request.json"
 RESULT_FILE = UPDATE_DIR / "result.json"
+PREVIOUS_FILE = UPDATE_DIR / "previous-version"   # vom Host-Updater geschrieben
 # M7: App-Audit (Container, weniger vertrauenswuerdig) getrennt vom Host-Audit.
 # Der Host-Updater schreibt in host-audit.log (append-only via chattr +a); der
 # Container kann es dank cap_drop ALL nicht umschreiben/loeschen, nur die App
@@ -138,8 +139,17 @@ def audit(actor: str, action: str, detail: str = "") -> None:
 # ---------------------------------------------------------------------------
 # Anforderung an den host-seitigen Updater
 # ---------------------------------------------------------------------------
-def request_update(target: str, actor: str) -> None:
-    """Schreibt die Update-Anforderung. Fuehrt selbst KEINE Docker-Aktion aus."""
+def previous_version() -> str | None:
+    """Vom Host-Updater gemerkte vorherige Version (fuer 1-Klick-Rollback)."""
+    try:
+        val = PREVIOUS_FILE.read_text(encoding="utf-8").strip()
+        return val or None
+    except OSError:
+        return None
+
+
+def request_update(target: str, actor: str, action: str = "UPDATE_REQUESTED") -> None:
+    """Schreibt die (Update-/Rollback-)Anforderung. Fuehrt selbst KEINE Docker-Aktion aus."""
     UPDATE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         RESULT_FILE.unlink()
@@ -149,7 +159,11 @@ def request_update(target: str, actor: str) -> None:
     tmp = REQUEST_FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload), encoding="utf-8")
     tmp.replace(REQUEST_FILE)
-    audit(actor, "UPDATE_REQUESTED", f"target={target}")
+    audit(actor, action, f"target={target}")
+
+
+def request_rollback(target: str, actor: str) -> None:
+    request_update(target, actor, action="ROLLBACK_REQUESTED")
 
 
 def read_audit(lines: int = 50) -> str:
@@ -175,4 +189,5 @@ def update_state() -> dict:
             result = json.loads(RESULT_FILE.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             result = None
-    return {"pending": pending, "result": result, "audit": read_audit(40), "mode": MODE}
+    return {"pending": pending, "result": result, "audit": read_audit(40),
+            "mode": MODE, "previous": previous_version()}

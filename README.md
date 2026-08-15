@@ -215,6 +215,11 @@ Sicherheitsleitlinien für den Update-Zugang:
    - **`host-agent`**: GUI-Knopf (RBAC + Zielversion eintippen) schreibt die
      Anforderung; der host-seitige Updater erledigt verify → pull → healthcheck → rollback.
 
+**Rollback per Klick:** Nach einem erfolgreichen Update merkt sich der Updater die
+vorherige Version. Im Admin erscheint dann (im `host-agent`-Modus) ein Knopf
+„↩ Rollback auf vX.Y.Z", der genau denselben sicheren Pfad wie ein Update nutzt
+(Signaturprüfung → Pull der alten Version → Healthcheck).
+
 ### Host-seitigen Updater installieren (Linux/systemd)
 
 ```bash

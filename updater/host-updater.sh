@@ -45,6 +45,13 @@ persist_tag() {
     fi
 }
 
+# Vorherige Version merken, damit das GUI einen 1-Klick-Rollback anbieten kann.
+persist_previous() {
+    [ -n "${1:-}" ] || return 0
+    printf '%s\n' "$1" > "$UPDATE_DIR/previous-version.tmp" \
+        && mv "$UPDATE_DIR/previous-version.tmp" "$UPDATE_DIR/previous-version"
+}
+
 # Vorherige Image-IDs unter den Ziel-Refs wiederherstellen und neu starten.
 do_rollback() {
     local reason="$1"
@@ -75,6 +82,8 @@ if ! printf '%s' "$TARGET" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'; then
     exit 1
 fi
 
+# Aktuell laufende Version merken (fuer Rollback), bevor wir sie ueberschreiben.
+PREV_BEFORE="${IMAGE_TAG:-latest}"
 export IMAGE_TAG="$TARGET"
 CONFIG_REF="ghcr.io/${UPDATE_REPO}/config-app:${TARGET}"
 HAPROXY_REF="ghcr.io/${UPDATE_REPO}/haproxy:${TARGET}"
@@ -146,6 +155,7 @@ if [ "$healthy" -eq 1 ]; then
     audit "HEALTHCHECK_OK -> Update auf $TARGET erfolgreich"
     result "ok" "$TARGET"
     persist_tag "$TARGET"
+    [ "$TARGET" != "$PREV_BEFORE" ] && persist_previous "$PREV_BEFORE"
 else
     audit "HEALTHCHECK_FAILED -> rollback"
     do_rollback "healthcheck"
