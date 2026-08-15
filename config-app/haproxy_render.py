@@ -77,7 +77,7 @@ def _server_opts(backend_addr: str) -> str:
     return "check inter 5s resolvers docker init-addr last,libc,none"
 
 
-def render(config: dict) -> str:
+def render(config: dict, stats_auth: str = "") -> str:
     all_services = config.get("services", [])
 
     lines = []
@@ -121,6 +121,10 @@ def render(config: dict) -> str:
     A("    stats enable")
     A("    stats uri /stats")
     A("    stats refresh 5s")
+    if stats_auth:
+        # N3: Stats erfordern Basic-Auth (kein unauth. Info-Leak im Docker-Netz).
+        A("    stats realm HAProxy\\ Statistics")
+        A(f"    stats auth {stats_auth}")
     A("")
     A("# HTTP -> HTTPS Redirect")
     A("frontend fe_http")

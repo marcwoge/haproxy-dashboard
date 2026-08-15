@@ -57,6 +57,6 @@
 - [x] SVG-Logo-Upload absichern: aktive Inhalte abgelehnt + `/logo` mit CSP `sandbox`
       und `X-Content-Type-Options: nosniff` — N1
 - [x] TLS-Härtung: `ssl-min-ver TLSv1.2`, moderne Ciphers/Ciphersuites, HSTS (opt-in) — N2
-- [ ] Interne Stats-Schnittstelle (`:8404`) mit Auth / lokal binden — N3
-- [ ] Generische Fehlermeldungen im GUI (Details nur ins Log) — N4
-- [ ] Selbstsigniertes Zertifikat persistieren (nicht bei jedem Neustart neu) — N5
+- [x] Interne Stats-Schnittstelle (`:8404`) mit Basic-Auth (Shared Secret) abgesichert — N3
+- [x] Generische Fehlermeldungen im GUI (interne Details nur ins Log) — N4
+- [x] Selbstsigniertes Zertifikat persistieren (stabiler Fingerprint über Neustarts) — N5

@@ -50,16 +50,26 @@ build_pem() {
         if [ -f "$f" ]; then key="$f"; break; fi
     done
 
+    # Persistiertes selbstsigniertes Zertifikat (N5): stabiler Fingerprint ueber
+    # Neustarts hinweg (kein Trust-on-first-use-Bruch / Pinning-Chaos).
+    SELF_PEM="$DYN/selfsigned.pem"
+
     if [ -n "$crt" ] && [ -n "$key" ] && [ "$crt" != "$key" ]; then
         log "Verwende Zertifikat: $crt + Schluessel: $key"
         cat "$crt" "$key" > "$PEM"
+    elif [ -f "$SELF_PEM" ]; then
+        log "Verwende persistiertes selbstsigniertes Zertifikat (stabiler Fingerprint)"
+        cp "$SELF_PEM" "$PEM"
     else
-        log "Kein Zertifikat/Schluessel in $CERT_DIR -> erzeuge selbstsigniertes Zertifikat fuer $DOMAIN"
+        log "Kein Zertifikat in $CERT_DIR -> erzeuge selbstsigniertes Zertifikat fuer $DOMAIN (wird persistiert)"
         openssl req -x509 -newkey rsa:2048 -nodes \
             -keyout /tmp/selfsigned.key -out /tmp/selfsigned.crt -days 825 \
             -subj "/CN=$DOMAIN" \
             -addext "subjectAltName=DNS:$DOMAIN" >/dev/null 2>&1
-        cat /tmp/selfsigned.crt /tmp/selfsigned.key > "$PEM"
+        cat /tmp/selfsigned.crt /tmp/selfsigned.key > "$SELF_PEM"
+        chmod 600 "$SELF_PEM"
+        cp "$SELF_PEM" "$PEM"
+        rm -f /tmp/selfsigned.key /tmp/selfsigned.crt
     fi
     chmod 600 "$PEM"
 }

@@ -4,6 +4,7 @@ Liefert das Kachel-Dashboard und ein Web-GUI zur Verwaltung der Services
 und des Erscheinungsbilds. Schreibt services.yaml und generiert daraus die
 haproxy.cfg (der haproxy-Container laedt sie automatisch neu).
 """
+import base64
 import csv
 import hashlib
 import hmac
@@ -142,29 +143,34 @@ _SVG_DANGER = re.compile(
 def _svg_is_safe(data: bytes) -> bool:
     return _SVG_DANGER.search(data or b"") is None
 
-def _load_secret_key() -> str:
-    """SECRET_KEY aus Secret/Env, sonst persistent generieren (kein hartkodierter Default)."""
-    env = _secret("SECRET_KEY")
-    if env:
-        return env
-    key_file = CONFIG_DIR / ".secret_key"
+def _read_or_create_secret(path: Path) -> str:
+    """Persistentes Zufallsgeheimnis: lesen oder einmalig erzeugen (0600)."""
     try:
-        if key_file.exists():
-            val = key_file.read_text(encoding="utf-8").strip()
+        if path.exists():
+            val = path.read_text(encoding="utf-8").strip()
             if val:
                 return val
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         val = secrets.token_hex(32)
-        key_file.write_text(val, encoding="utf-8")
+        path.write_text(val, encoding="utf-8")
         try:
-            os.chmod(key_file, 0o600)
+            os.chmod(path, 0o600)
         except OSError:
             pass
         return val
     except OSError:
-        # Fallback: fluechtiger Zufallsschluessel (Sessions ueberleben Neustart nicht)
-        return secrets.token_hex(32)
+        return secrets.token_hex(32)   # fluechtig (ueberlebt Neustart nicht)
 
+
+def _load_secret_key() -> str:
+    """SECRET_KEY aus Secret/Env, sonst persistent generieren (kein hartkodierter Default)."""
+    return _secret("SECRET_KEY") or _read_or_create_secret(CONFIG_DIR / ".secret_key")
+
+
+# N3: interne HAProxy-Stats-Schnittstelle mit Basic-Auth absichern (Shared Secret).
+STATS_USER = os.environ.get("STATS_USER", "statsuser")
+STATS_SECRET = _read_or_create_secret(CONFIG_DIR / ".stats_secret")
+STATS_AUTH = f"{STATS_USER}:{STATS_SECRET}"
 
 app = Flask(__name__)
 app.secret_key = _load_secret_key()
@@ -244,7 +250,7 @@ def save_config(cfg: dict) -> None:
 
 def regenerate(cfg: dict) -> None:
     HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
-    text = render_haproxy(cfg)
+    text = render_haproxy(cfg, stats_auth=STATS_AUTH)
     tmp = HAPROXY_CFG.with_suffix(".cfg.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
@@ -290,9 +296,12 @@ def read_validation_status() -> dict:
 
 
 def fetch_backend_status() -> dict:
-    """Holt die HAProxy-Stats (CSV) und liefert {backend_name: {status, check}}."""
+    """Holt die HAProxy-Stats (CSV, Basic-Auth) und liefert {backend_name: {status, check}}."""
     try:
-        with urllib.request.urlopen(STATS_URL, timeout=2) as r:
+        req = urllib.request.Request(STATS_URL)
+        cred = base64.b64encode(f"{STATS_USER}:{STATS_SECRET}".encode()).decode()
+        req.add_header("Authorization", f"Basic {cred}")
+        with urllib.request.urlopen(req, timeout=2) as r:
             data = r.read().decode("utf-8", "replace")
     except Exception as exc:  # noqa: BLE001 - jede Netz-/Verbindungsstoerung
         return {"_error": str(exc)}
@@ -338,7 +347,11 @@ def _dot_class(status: str) -> str:
 def _service_states(cfg: dict):
     """Pro Service den Backend-Status fuers GUI aufbereiten."""
     bk = fetch_backend_status()
-    stats_error = bk.get("_error")
+    # N4: interne Fehlerdetails nur ins Log, dem GUI nur eine generische Meldung.
+    stats_error = None
+    if "_error" in bk:
+        _log.warning("Backend-Stats nicht abrufbar: %s", bk["_error"])
+        stats_error = "zurzeit nicht abrufbar"
     states = []
     for idx, s in enumerate(cfg["services"]):
         name = f"bk_{_safe_id(s.get('name', 'svc'), idx)}"
