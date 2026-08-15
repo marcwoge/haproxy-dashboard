@@ -13,6 +13,7 @@ import re
 import secrets
 import shutil
 import threading
+import time
 import urllib.request
 from functools import wraps
 from logging.handlers import RotatingFileHandler
@@ -62,6 +63,61 @@ WEAK_PASSWORDS = {
     "changeme", "change-me", "password", "passwort", "admin", "administrator",
     "123456", "12345678", "secret", "changethis", "test", "root", "default",
 }
+
+# H2: Brute-Force-Schutz am Admin-Login (pro Client-IP).
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_WINDOW = int(os.environ.get("LOGIN_WINDOW", "300"))     # Zeitfenster (s)
+LOGIN_LOCKOUT = int(os.environ.get("LOGIN_LOCKOUT", "300"))   # Sperrdauer (s)
+
+
+class LoginRateLimiter:
+    """Einfacher In-Memory-Ratelimiter: sperrt eine IP nach zu vielen
+    Fehlversuchen im Zeitfenster. Zaehlt nur falsche Credentials."""
+
+    def __init__(self, max_attempts: int, window: int, lockout: int):
+        self.max = max_attempts
+        self.window = window
+        self.lockout = lockout
+        self._fails: dict[str, list] = {}
+        self._locked: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def _prune(self, now: float) -> None:
+        for ip in list(self._locked):
+            if self._locked[ip] <= now:
+                del self._locked[ip]
+        for ip in list(self._fails):
+            self._fails[ip] = [t for t in self._fails[ip] if now - t < self.window]
+            if not self._fails[ip]:
+                del self._fails[ip]
+
+    def locked_for(self, ip: str) -> int:
+        """Verbleibende Sperrdauer in Sekunden (0 = nicht gesperrt)."""
+        now = time.time()
+        with self._lock:
+            until = self._locked.get(ip, 0)
+            return int(until - now) + 1 if until > now else 0
+
+    def record_failure(self, ip: str) -> bool:
+        """True, wenn diese IP dadurch neu gesperrt wurde."""
+        now = time.time()
+        with self._lock:
+            self._prune(now)
+            fails = self._fails.setdefault(ip, [])
+            fails.append(now)
+            if len(fails) >= self.max:
+                self._locked[ip] = now + self.lockout
+                self._fails.pop(ip, None)
+                return True
+            return False
+
+    def record_success(self, ip: str) -> None:
+        with self._lock:
+            self._fails.pop(ip, None)
+            self._locked.pop(ip, None)
+
+
+_limiter = LoginRateLimiter(LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW, LOGIN_LOCKOUT)
 
 DEFAULT_THEME = {
     "title": "Acme Platform",
@@ -314,6 +370,44 @@ def _admin_locked_response() -> Response:
     )
 
 
+def _client_ip() -> str:
+    """Echte Client-IP. HAProxy setzt X-Client-IP per `set-header` (ueberschreibt
+    jeden Client-Wert -> spoof-sicher). Fallback: remote_addr."""
+    return request.headers.get("X-Client-IP") or request.remote_addr or "unknown"
+
+
+def _auth_challenge(realm: str) -> Response:
+    return Response("Authentifizierung erforderlich.", 401,
+                    {"WWW-Authenticate": f'Basic realm="{realm}"'})
+
+
+def _too_many_response(retry: int) -> Response:
+    return Response(
+        f"Zu viele fehlgeschlagene Anmeldeversuche. Bitte in {retry} s erneut versuchen.",
+        429, {"Retry-After": str(retry)})
+
+
+def _auth_or_response(user: str, password: str, realm: str):
+    """None = authentifiziert; sonst eine Response (403/401/429). H2-Ratelimit."""
+    if not password:
+        return _admin_locked_response()
+    ip = _client_ip()
+    remaining = _limiter.locked_for(ip)
+    if remaining:
+        return _too_many_response(remaining)
+    auth = request.authorization
+    if not auth:
+        # Noch keine Credentials -> nur Prompt, NICHT als Fehlversuch werten.
+        return _auth_challenge(realm)
+    if not _basic_ok(auth, user, password):
+        newly = _limiter.record_failure(ip)
+        _log.warning("Fehlgeschlagener Admin-Login von %s%s", ip,
+                     " -> IP gesperrt" if newly else "")
+        return _too_many_response(_limiter.lockout) if newly else _auth_challenge(realm)
+    _limiter.record_success(ip)
+    return None
+
+
 def check_admin_password() -> None:
     """Warnt beim Start vor leerem/schwachem Passwort (kein stiller offener Admin)."""
     if not ADMIN_PASSWORD:
@@ -328,14 +422,8 @@ def check_admin_password() -> None:
 def requires_auth(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if not ADMIN_PASSWORD:
-            return _admin_locked_response()
-        if not _basic_ok(request.authorization, ADMIN_USER, ADMIN_PASSWORD):
-            return Response(
-                "Authentifizierung erforderlich.", 401,
-                {"WWW-Authenticate": 'Basic realm="Acme Platform Admin"'},
-            )
-        return f(*args, **kwargs)
+        resp = _auth_or_response(ADMIN_USER, ADMIN_PASSWORD, "Acme Platform Admin")
+        return f(*args, **kwargs) if resp is None else resp
     return wrapper
 
 
@@ -351,12 +439,9 @@ def requires_platform_admin(f):
     def wrapper(*args, **kwargs):
         # Wenn eine dedizierte Plattform-Admin-Rolle gesetzt ist, diese verlangen.
         if PLATFORM_ADMIN_PASSWORD:
-            if not _basic_ok(request.authorization, PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASSWORD):
-                return Response(
-                    "Für system.update ist die Plattform-Admin-Rolle erforderlich.", 401,
-                    {"WWW-Authenticate": 'Basic realm="Acme Platform-Admin (system.update)"'},
-                )
-            return f(*args, **kwargs)
+            resp = _auth_or_response(PLATFORM_ADMIN_USER, PLATFORM_ADMIN_PASSWORD,
+                                     "Acme Platform-Admin (system.update)")
+            return f(*args, **kwargs) if resp is None else resp
         # Fallback: mindestens normaler Admin (gesperrt, wenn ADMIN_PASSWORD leer).
         return requires_auth(f)(*args, **kwargs)
     return wrapper

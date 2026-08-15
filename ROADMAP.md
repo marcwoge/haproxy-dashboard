@@ -37,7 +37,8 @@
 **Hoch**
 - [x] Kein funktionierendes Default-Passwort; leeres Passwort SPERRT das Admin-GUI,
       Warnung bei schwachem Passwort — H1
-- [ ] Rate-Limiting / Brute-Force-Schutz am Admin-Login — H2
+- [x] Rate-Limiting / Brute-Force-Schutz am Admin-Login (IP-Sperre nach N Fehlversuchen,
+      echte Client-IP via HAProxy `X-Client-IP`) — H2
 - [x] `target`/Tag strikt validieren (GUI + host-updater + check-latest) — verhindert
       Injection in request.json/`.env` — H3
 

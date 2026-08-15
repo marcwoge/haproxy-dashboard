@@ -10,6 +10,10 @@ services:
       - PLATFORM_DOMAIN=${PLATFORM_DOMAIN:-platform.example.local}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Brute-Force-Schutz am Login (H2)
+      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-5}
+      - LOGIN_WINDOW=${LOGIN_WINDOW:-300}
+      - LOGIN_LOCKOUT=${LOGIN_LOCKOUT:-300}
       # Getrennte, hoehere Rolle fuer system.update (RBAC). Leer = faellt auf Admin zurueck.
       - PLATFORM_ADMIN_USER=${PLATFORM_ADMIN_USER:-}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-}

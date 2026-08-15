@@ -113,6 +113,8 @@ def render(config: dict) -> str:
     A(f"    bind :443 ssl crt {CERT_PEM} alpn h2,http/1.1")
     A("    http-request set-header X-Forwarded-Proto https")
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
+    # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
+    A("    http-request set-header X-Client-IP %[src]")
     A("")
 
     backends = []
