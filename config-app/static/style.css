@@ -40,6 +40,7 @@ body {
 @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 
 .tile {
+  position: relative;
   background: var(--tile-bg, var(--tile));
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 16px;
@@ -52,6 +53,15 @@ body {
   min-height: 150px;
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
   box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+.tile-status {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0,0,0,.25);
+  box-sizing: content-box;
 }
 .tile:hover {
   transform: translateY(-4px);

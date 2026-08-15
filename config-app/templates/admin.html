@@ -131,10 +131,10 @@
         <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
       </label>
       <label>Pfad
-        <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
+        <input name="path" required value="{{ e.path or '' }}" placeholder="/example">
       </label>
       <label>Backend (Container:Port oder Host:Port / IP:Port)
-        <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
+        <input name="backend" value="{{ e.backend or '' }}" placeholder="example:8080">
       </label>
       <label>Schema (HAProxy → Backend)
         <select name="scheme">
@@ -189,6 +189,10 @@
       </label>
       <label>Kacheln pro Reihe
         <input name="columns" type="number" min="1" max="8" value="{{ theme.columns }}">
+      </label>
+      <label class="check">
+        <input type="checkbox" name="show_status" {{ 'checked' if theme.show_status }}>
+        Backend-Status auf dem Dashboard anzeigen
       </label>
       <label>Hintergrund oben
         <input name="background" type="color" value="{{ theme.background }}">

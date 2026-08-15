@@ -9,9 +9,13 @@
   <p class="subtitle">{{ theme.subtitle }}</p>
 </header>
 
-<main class="grid">
+<main class="grid" data-show-status="{{ '1' if show_status else '0' }}">
   {% for s in services %}
-  <a class="tile" href="{{ s.path }}" style="--tile-bg: {{ s.color or theme.tile_color }};">
+  <a class="tile" href="{{ s.path }}" data-path="{{ s.path }}"
+     style="--tile-bg: {{ s.color or theme.tile_color }};">
+    {% if show_status %}
+    <span class="tile-status dot dot-{{ s.dot or 'unknown' }}" title="Status: {{ s.dot or 'unbekannt' }}"></span>
+    {% endif %}
     <div class="tile-icon">{{ s.icon or '▣' }}</div>
     <div class="tile-name">{{ s.name }}</div>
     {% if s.description %}<div class="tile-desc">{{ s.description }}</div>{% endif %}
@@ -26,4 +30,5 @@
 <footer class="footer">
   <a href="/admin" class="admin-link">⚙ Konfiguration</a>
 </footer>
+{% if show_status %}<script src="{{ url_for('static', filename='dashboard.js') }}"></script>{% endif %}
 {% endblock %}

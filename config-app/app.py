@@ -131,6 +131,7 @@ DEFAULT_THEME = {
     "columns": 4,
     "logo": "",          # Dateiname im CONFIG_DIR (leer = kein Logo)
     "logo_height": 64,   # Anzeigehoehe in Pixeln
+    "show_status": True, # Backend-Status auf dem Dashboard anzeigen
 }
 
 ALLOWED_LOGO_EXT = {".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp", ".ico"}
@@ -295,8 +296,17 @@ def read_validation_status() -> dict:
     return res
 
 
+# Kurz-Cache, damit haeufige Dashboard-/Admin-Abfragen HAProxy nicht ueberlasten.
+_STATS_CACHE = {"ts": 0.0, "data": None}
+_STATS_TTL = float(os.environ.get("STATS_CACHE_TTL", "2"))
+
+
 def fetch_backend_status() -> dict:
     """Holt die HAProxy-Stats (CSV, Basic-Auth) und liefert {backend_name: {status, check}}."""
+    now = time.time()
+    cached = _STATS_CACHE["data"]
+    if cached is not None and now - _STATS_CACHE["ts"] < _STATS_TTL:
+        return cached
     try:
         req = urllib.request.Request(STATS_URL)
         cred = base64.b64encode(f"{STATS_USER}:{STATS_SECRET}".encode()).decode()
@@ -304,19 +314,21 @@ def fetch_backend_status() -> dict:
         with urllib.request.urlopen(req, timeout=2) as r:
             data = r.read().decode("utf-8", "replace")
     except Exception as exc:  # noqa: BLE001 - jede Netz-/Verbindungsstoerung
-        return {"_error": str(exc)}
-    lines = data.splitlines()
-    if not lines:
-        return {}
-    header = lines[0].lstrip("# ").split(",")
+        result = {"_error": str(exc)}
+        _STATS_CACHE["ts"], _STATS_CACHE["data"] = now, result
+        return result
     result = {}
-    for row in csv.DictReader(lines[1:], fieldnames=header):
-        px, sv = row.get("pxname"), row.get("svname")
-        if not px or sv in (None, "FRONTEND", "BACKEND"):
-            continue
-        if px.startswith("bk_"):
-            result[px] = {"status": row.get("status", ""),
-                          "check": row.get("check_status", "")}
+    lines = data.splitlines()
+    if lines:
+        header = lines[0].lstrip("# ").split(",")
+        for row in csv.DictReader(lines[1:], fieldnames=header):
+            px, sv = row.get("pxname"), row.get("svname")
+            if not px or sv in (None, "FRONTEND", "BACKEND"):
+                continue
+            if px.startswith("bk_"):
+                result[px] = {"status": row.get("status", ""),
+                              "check": row.get("check_status", "")}
+    _STATS_CACHE["ts"], _STATS_CACHE["data"] = now, result
     return result
 
 
@@ -535,12 +547,42 @@ def _logo_url(theme) -> str | None:
 # ----------------------------------------------------------------------------
 # Routen
 # ----------------------------------------------------------------------------
+def _dashboard_services(cfg: dict):
+    """Aktivierte Services fuer das Dashboard, optional mit Backend-Status."""
+    show_status = cfg["theme"].get("show_status", True)
+    status_by_index = {}
+    if show_status:
+        states, _ = _service_states(cfg)
+        status_by_index = {st["index"]: st for st in states}
+    services = []
+    for idx, s in enumerate(cfg["services"]):
+        if not s.get("enabled", True):
+            continue
+        item = dict(s)
+        st = status_by_index.get(idx)
+        item["dot"] = st["dot"] if st else None
+        services.append(item)
+    return services, show_status
+
+
 @app.route("/")
 def dashboard():
     cfg = load_config()
-    services = [s for s in cfg["services"] if s.get("enabled", True)]
-    return render_template("dashboard.html", theme=cfg["theme"],
-                           services=services, logo_url=_logo_url(cfg["theme"]))
+    services, show_status = _dashboard_services(cfg)
+    return render_template("dashboard.html", theme=cfg["theme"], services=services,
+                           show_status=show_status, logo_url=_logo_url(cfg["theme"]))
+
+
+@app.route("/status")
+def public_status():
+    """Oeffentlicher, minimaler Status je Kachel (nur Pfad + Status-Klasse) fuers
+    Live-Update des Dashboards - keine internen Details."""
+    cfg = load_config()
+    if not cfg["theme"].get("show_status", True):
+        abort(404)
+    services, _ = _dashboard_services(cfg)
+    return {"services": [{"path": s.get("path"), "dot": s.get("dot") or "unknown"}
+                         for s in services]}
 
 
 @app.route("/logo")
@@ -736,6 +778,7 @@ def admin_theme():
         theme["logo_height"] = max(16, min(400, int(request.form.get("logo_height", theme.get("logo_height", 64)))))
     except (ValueError, TypeError):
         pass
+    theme["show_status"] = request.form.get("show_status") == "on"
 
     # Logo: entfernen, ersetzen oder unveraendert lassen
     upload = request.files.get("logo_file")

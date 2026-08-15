@@ -16,15 +16,16 @@ theme:
   columns: 4                 # Anzahl Kacheln pro Reihe (max.)
   logo: ""                   # Dateiname im config-Ordner (per GUI hochladen)
   logo_height: 64            # Anzeigehoehe des Logos in Pixeln
+  show_status: true          # Backend-Status (UP/DOWN) auf dem Dashboard anzeigen
 
 services:
   - name: "Example Service"
     path: "/example"
-    backend: "example-app:8080"     # Container-Name:Port  ODER  host:port / ip:port
+    backend: "example:8080"   # Container-Name:Port  ODER  host:port / ip:port
     scheme: "http"                  # http | https (wie HAProxy mit dem Backend spricht)
     ssl_verify: false               # nur bei scheme=https relevant
     strip_path: false               # /example vor Weiterleitung entfernen?
-    icon: "📦"
+    icon: "🗑️"
     color: "#22c55e"                # optionale Kachelfarbe (leer = Standard)
-    description: "Beispiel-Anwendung (im Admin-GUI anpassen)"
+    description: "Abfallmanagement-Anwendung"
     enabled: true

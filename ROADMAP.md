@@ -23,7 +23,7 @@
 ## Ideen / offen
 - [x] Automatischer Update-Zeitplan (systemd-Timer) – opt-in via `AUTO_UPDATE=true`,
       mit Signaturprüfung/Healthcheck/Rollback und Rollback-Schleifen-Schutz (auto-skip)
-- [ ] Backend-Status auch auf dem Dashboard (nicht nur Admin)
+- [x] Backend-Status auch auf dem Dashboard (Status-Punkt je Kachel, live + Toggle) 
 - [ ] Rollback auf vorherige Version per Klick
 - [ ] Health-/Update-Benachrichtigung per E-Mail/Webhook
 
