@@ -381,7 +381,7 @@ def _tail(path: Path, n: int) -> str:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             return "".join(f.readlines()[-n:])
     except OSError:
-        return "(noch keine Logeintraege)"
+        return ""   # leer -> die Anzeige uebersetzt (common.empty)
 
 
 def _dot_class(status: str) -> str:
@@ -661,6 +661,9 @@ def admin():
     status_by_index = {st["index"]: st for st in states}
     update_info = updater.check(force=False)
     update_info["previous"] = updater.previous_version()   # live, nicht gecacht
+    if update_info.get("error"):   # Updater liefert Keys -> hier uebersetzen
+        t = i18n.translator(cfg.get("language", DEFAULT_LANG))
+        update_info["error"] = t(update_info["error"], arg=update_info.get("error_arg", ""))
     return render_template(
         "admin.html",
         cfg=cfg,
@@ -720,7 +723,8 @@ def admin_update_check():
     t = _t()
     res = updater.check(force=True)
     if res.get("error"):
-        flash(t("flash.update_check_error", error=res["error"]), "error")
+        detail = t(res["error"], arg=res.get("error_arg", ""))
+        flash(t("flash.update_check_error", error=detail), "error")
     elif res.get("update_available"):
         flash(t("flash.update_available", tag=res.get("tag")), "ok")
     else:

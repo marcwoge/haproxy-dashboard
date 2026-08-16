@@ -70,8 +70,10 @@ def is_newer(latest: str, current: str) -> bool:
 # Release-Pruefung (read-only)
 # ---------------------------------------------------------------------------
 def fetch_latest_release() -> dict:
+    # Fehler werden als Uebersetzungs-Keys (+ optionalem "error_arg") zurueckgegeben;
+    # die Uebersetzung erfolgt an der Anzeigestelle (Sprache des Nutzers).
     if not REPO:
-        return {"error": "UPDATE_REPO ist nicht gesetzt"}
+        return {"error": "update.err_no_repo"}
     url = f"https://api.github.com/repos/{REPO}/releases/latest"
     req = urllib.request.Request(url)
     req.add_header("Accept", "application/vnd.github+json")
@@ -90,12 +92,12 @@ def fetch_latest_release() -> dict:
         }
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return {"error": "Noch keine Releases veröffentlicht"}
+            return {"error": "update.err_no_releases"}
         if e.code in (401, 403):
-            return {"error": f"Zugriff verweigert ({e.code}) – Token/Rechte prüfen"}
-        return {"error": f"GitHub-API HTTP {e.code}"}
+            return {"error": "update.err_forbidden", "error_arg": e.code}
+        return {"error": "update.err_http", "error_arg": e.code}
     except Exception as e:  # noqa: BLE001
-        return {"error": f"Netzwerkfehler: {e}"}
+        return {"error": "update.err_network", "error_arg": str(e)}
 
 
 def check(force: bool = False) -> dict:
@@ -175,7 +177,7 @@ def read_audit(lines: int = 50) -> str:
         except OSError:
             pass
     if not entries:
-        return "(noch keine Audit-Einträge)"
+        return ""   # leer -> die Anzeige uebersetzt (update.audit_empty)
     # Zeilen beginnen mit ISO-Zeitstempel -> lexikografische Sortierung = chronologisch.
     entries.sort()
     return "\n".join(entries[-lines:])

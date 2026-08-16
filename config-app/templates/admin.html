@@ -81,7 +81,7 @@
     {# Audit-Log der Update-Aktionen (append-only) #}
     <details class="upd-audit">
       <summary>{{ t('update.audit') }}</summary>
-      <pre id="upd-audit-box" class="logbox" style="height:150px;">{{ update_audit }}</pre>
+      <pre id="upd-audit-box" class="logbox" style="height:150px;">{{ update_audit or t('update.audit_empty') }}</pre>
     </details>
 
     {# Fortschritt/Ergebnis eines Ein-Klick-Updates (JS-aktualisiert) #}

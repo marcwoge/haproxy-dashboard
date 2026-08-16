@@ -50,6 +50,11 @@
   "update.audit_empty": "(no audit entries yet)",
   "update.pending_title": "Update requested – running …",
   "update.last_result": "last result: {state}",
+  "update.err_no_repo": "UPDATE_REPO is not set",
+  "update.err_no_releases": "No releases published yet",
+  "update.err_forbidden": "Access denied ({arg}) – check token/permissions",
+  "update.err_http": "GitHub API HTTP {arg}",
+  "update.err_network": "Network error: {arg}",
 
   "svc.heading": "Services",
   "svc.col_status": "Status",

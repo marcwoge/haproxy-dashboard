@@ -2,6 +2,17 @@
 
 **Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
 
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Release](https://img.shields.io/badge/release-v1.0.0-brightgreen.svg)
+![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
+
+> Schlanker **HAProxy-Reverse-Proxy** mit Kachel-Dashboard und Admin-GUI –
+> Routing, TLS, Live-Backend-Status und sichere Updates, alles über die
+> Oberfläche konfigurierbar.
+
+![Dashboard](docs/screenshot-dashboard.png)
+
 Reverse Proxy auf Basis von **HAProxy** mit:
 
 - TLS-Terminierung auf einer **frei konfigurierbaren Domain** (`PLATFORM_DOMAIN`)
@@ -12,6 +23,13 @@ Reverse Proxy auf Basis von **HAProxy** mit:
 - pro Service: http/https zum Backend, **SSL-Prüfung an/aus** (selbstsignierte Backends ok)
 - automatischer **Reload** bei Konfig-Änderung (vorher validiert)
 - **mehrsprachige Oberfläche** über Sprachpakete (Deutsch & Englisch, erweiterbar)
+
+<details>
+<summary>🖥️ Admin-GUI ansehen</summary>
+
+![Admin-GUI](docs/screenshot-admin.png)
+
+</details>
 
 ---
 
