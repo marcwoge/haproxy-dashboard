@@ -1,5 +1,7 @@
 # Acme Platform – HAProxy Reverse Proxy + Dashboard
 
+**Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
+
 Reverse Proxy auf Basis von **HAProxy** mit:
 
 - TLS-Terminierung auf einer **frei konfigurierbaren Domain** (`PLATFORM_DOMAIN`)
@@ -9,6 +11,7 @@ Reverse Proxy auf Basis von **HAProxy** mit:
 - pro Service wählbar: **Container-Name** (gemeinsames Docker-Netz) **oder** Host:Port / IP:Port
 - pro Service: http/https zum Backend, **SSL-Prüfung an/aus** (selbstsignierte Backends ok)
 - automatischer **Reload** bei Konfig-Änderung (vorher validiert)
+- **mehrsprachige Oberfläche** über Sprachpakete (Deutsch & Englisch, erweiterbar)
 
 ---
 
@@ -131,6 +134,19 @@ Pro Kachel kann zusätzlich eine eigene Farbe und ein Icon (Emoji) gesetzt werde
 **Logo:** im selben Formular hochladbar (png, jpg, svg, gif, webp, ico) inkl.
 einstellbarer Anzeigehöhe. Es wird im Dashboard über dem Titel angezeigt, liegt
 persistent unter `data\config\` und kann jederzeit ersetzt oder entfernt werden.
+
+### Sprache (Language Packs)
+
+Die Oberfläche ist mehrsprachig. Im Admin-GUI unter **„Erscheinungsbild & Domain“**
+lässt sich die **Sprache** umschalten (mitgeliefert: Deutsch, Englisch). Die Auswahl
+gilt für Dashboard und Admin gleichermaßen und wird in `services.yaml` gespeichert
+(Schlüssel `language`).
+
+**Weitere Sprache hinzufügen:** eine JSON-Datei nach `config-app/lang/<code>.json`
+legen (am einfachsten `en.json` kopieren und übersetzen). Der Schlüssel `_name`
+enthält den Anzeigenamen; fehlt eine Übersetzung, wird automatisch auf Englisch und
+danach auf den Schlüsselnamen zurückgefallen. Die neue Sprache erscheint ohne
+Codeänderung automatisch in der Auswahl.
 
 ---
 

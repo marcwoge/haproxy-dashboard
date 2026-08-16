@@ -4,6 +4,7 @@
 #  Editierbar ueber das Admin-GUI (/admin) ODER direkt hier.
 # ============================================================
 domain: platform.example.local
+language: de                  # Oberflaechensprache (de, en, ...) - siehe config-app/lang/
 
 theme:
   title: "Acme Platform"

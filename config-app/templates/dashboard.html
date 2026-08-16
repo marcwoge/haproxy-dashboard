@@ -14,7 +14,7 @@
   <a class="tile" href="{{ s.path }}" data-path="{{ s.path }}"
      style="--tile-bg: {{ s.color or theme.tile_color }};">
     {% if show_status %}
-    <span class="tile-status dot dot-{{ s.dot or 'unknown' }}" title="Status: {{ s.dot or 'unbekannt' }}"></span>
+    <span class="tile-status dot dot-{{ s.dot or 'unknown' }}" title="{{ t('dash.status') }}: {{ s.dot or t('dash.unknown') }}"></span>
     {% endif %}
     <div class="tile-icon">{{ s.icon or '▣' }}</div>
     <div class="tile-name">{{ s.name }}</div>
@@ -22,13 +22,15 @@
     <div class="tile-path">{{ s.path }}</div>
   </a>
   {% else %}
-  <div class="empty">Noch keine Services konfiguriert. Lege welche im
-    <a href="/admin">Admin-Bereich</a> an.</div>
+  <div class="empty">{{ t('dash.empty') }}
+    <a href="/admin">{{ t('dash.empty_link') }}</a></div>
   {% endfor %}
 </main>
 
 <footer class="footer">
-  <a href="/admin" class="admin-link">⚙ Konfiguration</a>
+  <a href="/admin" class="admin-link">{{ t('dash.admin_link') }}</a>
 </footer>
-{% if show_status %}<script src="{{ url_for('static', filename='dashboard.js') }}"></script>{% endif %}
+{% if show_status %}
+<script>window.I18N = { status: {{ t('dash.status')|tojson }}, unknown: {{ t('dash.unknown')|tojson }} };</script>
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>{% endif %}
 {% endblock %}

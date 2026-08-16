@@ -2,6 +2,8 @@
 (function () {
   "use strict";
 
+  var I18N = window.I18N || {};
+
   function dotClass(status) {
     var s = String(status || "unknown").trim().toLowerCase();
     var bucket = "unknown";
@@ -39,15 +41,15 @@
     let cls = "banner ", label = "";
     if (!v.is_current) {
       cls += "banner-pending";
-      label = "Validierung läuft … (HAProxy prüft die neue Config)";
+      label = I18N.banner_pending || "";
       msg.textContent = "";
     } else if (v.ok) {
       cls += "banner-ok";
-      label = "Konfiguration gültig und aktiv ✓";
+      label = I18N.banner_ok || "";
       msg.textContent = "";
     } else {
       cls += "banner-err";
-      label = "Konfiguration abgelehnt – HAProxy läuft mit der letzten gültigen Version weiter ✗";
+      label = I18N.banner_rejected || "";
       msg.textContent = v.message || "";
     }
     banner.className = cls;
@@ -70,14 +72,14 @@
       if (!res.ok) return;
       const data = await res.json();
       const atBottom = logbox.scrollHeight - logbox.scrollTop - logbox.clientHeight < 40;
-      logbox.textContent = data.text || "(leer)";
+      logbox.textContent = data.text || (I18N.empty || "");
       if (atBottom) logbox.scrollTop = logbox.scrollHeight;
     } catch (e) { /* ignorieren */ }
   }
 
   if (document.getElementById("log-refresh")) {
     document.getElementById("log-refresh").addEventListener("click", pollLogs);
-    whichSel.addEventListener("change", function () { logbox.textContent = "Lade …"; pollLogs(); });
+    whichSel.addEventListener("change", function () { logbox.textContent = I18N.loading || ""; pollLogs(); });
     linesSel.addEventListener("change", pollLogs);
   }
 
@@ -90,12 +92,12 @@
       if (!res.ok) return;
       const d = await res.json();
       const atBottom = auditBox.scrollHeight - auditBox.scrollTop - auditBox.clientHeight < 40;
-      auditBox.textContent = d.audit || "(noch keine Audit-Einträge)";
+      auditBox.textContent = d.audit || (I18N.audit_empty || "");
       if (atBottom) auditBox.scrollTop = auditBox.scrollHeight;
       // dezenter Hinweis am Versions-Badge, solange eine Anforderung offen ist
       const cur = document.getElementById("upd-current");
-      if (cur) cur.title = d.pending ? "Update angefordert – läuft …"
-        : (d.result ? ("letztes Ergebnis: " + (d.result.state || "")) : "");
+      if (cur) cur.title = d.pending ? (I18N.pending_title || "")
+        : (d.result ? ((I18N.last_result || "") + (d.result.state || "")) : "");
     } catch (e) { /* ignorieren */ }
   }
 

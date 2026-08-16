@@ -29,6 +29,9 @@ from waitress import serve
 from haproxy_render import render as render_haproxy, _norm_path, _safe_id
 import updater
 import notifier
+import i18n
+
+DEFAULT_LANG = os.environ.get("PLATFORM_LANG", "de")
 
 CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", "/app/config"))
 CONFIG_FILE = CONFIG_DIR / "services.yaml"
@@ -229,6 +232,16 @@ def _inject_csrf():
     return {"csrf_token": _csrf_token}
 
 
+@app.context_processor
+def _inject_i18n():
+    lang = load_config().get("language", DEFAULT_LANG)
+    return {
+        "t": i18n.translator(lang),
+        "lang": lang,
+        "languages": [(c, i18n.name(c)) for c in i18n.available()],
+    }
+
+
 @app.before_request
 def _csrf_protect():
     if request.method == "POST":
@@ -260,7 +273,14 @@ def load_config() -> dict:
     notif.update(stored)
     notif["events"] = events
     cfg["notifications"] = notif
+    lang = str(cfg.get("language") or DEFAULT_LANG)
+    cfg["language"] = lang if lang in i18n.available() else DEFAULT_LANG
     return cfg
+
+
+def _t():
+    """Uebersetzer-Funktion t(key, **kwargs) fuer die konfigurierte Sprache."""
+    return i18n.translator(load_config().get("language", DEFAULT_LANG))
 
 
 def save_config(cfg: dict) -> None:
@@ -421,10 +441,7 @@ def _basic_ok(auth, user: str, password: str) -> bool:
 
 
 def _admin_locked_response() -> Response:
-    return Response(
-        "Admin-GUI ist deaktiviert: bitte ADMIN_PASSWORD in .env setzen und neu starten.",
-        403,
-    )
+    return Response(_t()("flash.admin_locked"), 403)
 
 
 def _client_ip() -> str:
@@ -536,24 +553,25 @@ def _has_ctrl(s: str) -> bool:
 
 
 def validate_service(svc: dict) -> list:
-    """Gibt eine Liste von Fehlermeldungen zurueck (leer = gueltig)."""
+    """Gibt eine Liste von Fehler-Keys zurueck (leer = gueltig). Uebersetzung
+    erfolgt im Aufrufer ueber die konfigurierte Sprache."""
     errors = []
     name = svc.get("name", "")
     if not name or _has_ctrl(name):
-        errors.append("Name fehlt oder enthält unzulässige Steuerzeichen.")
+        errors.append("flash.field_invalid_name")
     path = svc.get("path", "")
     if not _RE_PATH.match(path) or ".." in path:
-        errors.append("Pfad ungültig: erlaubt sind /, Buchstaben, Ziffern, . _ - (keine Leer-/Sonderzeichen).")
+        errors.append("flash.field_invalid_path")
     backend = svc.get("backend", "")
     if backend and not _RE_BACKEND.match(backend):
-        errors.append("Backend ungültig: nur host/container[:port] bzw. ip[:port] erlaubt.")
+        errors.append("flash.field_invalid_backend")
     if svc.get("scheme") not in _RE_SCHEME:
-        errors.append("Schema muss http oder https sein.")
+        errors.append("flash.field_invalid_scheme")
     color = svc.get("color", "")
     if color and not _RE_COLOR.match(color):
-        errors.append("Farbe ungültig: Hex (z. B. #22c55e) oder einfacher Farbname.")
+        errors.append("flash.field_invalid_color")
     if _has_ctrl(svc.get("icon", "")) or _has_ctrl(svc.get("description", "")):
-        errors.append("Icon/Beschreibung enthält unzulässige Steuerzeichen.")
+        errors.append("flash.field_invalid_icon")
     return errors
 
 
@@ -699,21 +717,23 @@ def admin_update_state():
 @app.route("/admin/update/check", methods=["POST"])
 @requires_auth
 def admin_update_check():
+    t = _t()
     res = updater.check(force=True)
     if res.get("error"):
-        flash(f"Update-Prüfung: {res['error']}", "error")
+        flash(t("flash.update_check_error", error=res["error"]), "error")
     elif res.get("update_available"):
-        flash(f"Update verfügbar: {res.get('tag')}", "ok")
+        flash(t("flash.update_available", tag=res.get("tag")), "ok")
     else:
-        flash("Du verwendest bereits die aktuelle Version.", "ok")
+        flash(t("flash.update_up_to_date"), "ok")
     return redirect(url_for("admin") + "#updates")
 
 
 @app.route("/admin/update/apply", methods=["POST"])
 @requires_platform_admin
 def admin_update_apply():
+    t = _t()
     if updater.MODE != "host-agent":
-        flash("Automatisches Update ist nicht aktiv (UPDATE_MODE=manual). Bitte den angezeigten Befehl ausführen.", "error")
+        flash(t("flash.update_manual"), "error")
         return redirect(url_for("admin") + "#updates")
 
     target = request.form.get("target", "latest").strip()
@@ -723,41 +743,40 @@ def admin_update_apply():
     # H3: Ziel-Tag strikt validieren (verhindert Injection in request.json/.env).
     if not _RE_TARGET.match(target):
         updater.audit(actor, "UPDATE_TARGET_INVALID", f"target={target!r}")
-        flash("Ungültige Zielversion (erlaubt: Buchstaben, Ziffern, . _ -).", "error")
+        flash(t("flash.target_invalid"), "error")
         return redirect(url_for("admin") + "#updates")
 
     # Zwei-Schritt-Bestaetigung: Zielversion muss exakt eingetippt werden.
     if confirm != target:
         updater.audit(actor, "UPDATE_CONFIRM_MISMATCH", f"target={target} eingegeben={confirm}")
-        flash(f"Bestätigung fehlgeschlagen: Bitte exakt „{target}“ zur Bestätigung eintippen.", "error")
+        flash(t("flash.confirm_mismatch", target=target), "error")
         return redirect(url_for("admin") + "#updates")
 
     updater.request_update(target, actor)
     _log.info("Update angefordert von %s (Ziel: %s)", actor, target)
-    flash(f"Update auf {target} angefordert – der host-seitige Updater prüft Signatur, "
-          f"lädt die Images und startet mit Healthcheck/Rollback neu …", "ok")
+    flash(t("flash.update_requested", target=target), "ok")
     return redirect(url_for("admin") + "#updates")
 
 
 @app.route("/admin/update/rollback", methods=["POST"])
 @requires_platform_admin
 def admin_update_rollback():
+    t = _t()
     if updater.MODE != "host-agent":
-        flash("Rollback per Klick ist nur mit UPDATE_MODE=host-agent möglich.", "error")
+        flash(t("flash.rollback_disabled"), "error")
         return redirect(url_for("admin") + "#updates")
     actor = _current_actor()
     target = updater.previous_version()
     if not target:
-        flash("Keine vorherige Version bekannt – Rollback nicht möglich.", "error")
+        flash(t("flash.rollback_none"), "error")
         return redirect(url_for("admin") + "#updates")
     if not _RE_TARGET.match(target):
         updater.audit(actor, "ROLLBACK_TARGET_INVALID", f"target={target!r}")
-        flash("Vorherige Version ist ungültig – Rollback abgebrochen.", "error")
+        flash(t("flash.rollback_invalid"), "error")
         return redirect(url_for("admin") + "#updates")
     updater.request_rollback(target, actor)
     _log.info("Rollback angefordert von %s (Ziel: %s)", actor, target)
-    flash(f"Rollback auf {target} angefordert – der host-seitige Updater prüft Signatur, "
-          f"lädt die Images und startet mit Healthcheck neu …", "ok")
+    flash(t("flash.rollback_requested", target=target), "ok")
     return redirect(url_for("admin") + "#updates")
 
 
@@ -791,21 +810,23 @@ def admin_notify():
         "backend_down": f.get("ev_backend_down") == "on",
     }
     save_config(cfg)
-    flash("Benachrichtigungen gespeichert.", "ok")
+    flash(_t()("flash.notify_saved"), "ok")
     return redirect(url_for("admin") + "#notify")
 
 
 @app.route("/admin/notify/test", methods=["POST"])
 @requires_auth
 def admin_notify_test():
+    t = _t()
     n = load_config()["notifications"]
     results = notifier.dispatch(n, "test", "Testbenachrichtigung",
                                 "Dies ist eine Testnachricht des HAProxy-Dashboards.",
                                 {"test": True})
     if not results:
-        flash("Kein Kanal konfiguriert (E-Mail-Empfänger/SMTP oder Webhook fehlt).", "error")
+        flash(t("flash.notify_no_channel"), "error")
     for channel, ok, msg in results:
-        flash(f"Test {channel}: {'OK' if ok else 'Fehler – ' + msg}", "ok" if ok else "error")
+        flash(t("flash.notify_test", channel=channel,
+                result=("OK" if ok else "– " + msg)), "ok" if ok else "error")
     return redirect(url_for("admin") + "#notify")
 
 
@@ -813,32 +834,33 @@ def admin_notify_test():
 @requires_auth
 def admin_service():
     cfg = load_config()
+    t = i18n.translator(cfg.get("language", DEFAULT_LANG))
     svc = _service_from_form(request.form)
     if not svc["name"] or not svc["path"]:
-        flash("Name und Pfad sind Pflichtfelder.", "error")
+        flash(t("flash.name_path_required"), "error")
         return redirect(url_for("admin"))
 
     # K2: strikte Validierung gegen HAProxy-Config-Injection
     errors = validate_service(svc)
     if errors:
         for e in errors:
-            flash(e, "error")
+            flash(t(e), "error")
         _log.warning("Service abgelehnt (Validierung): %r", {k: svc.get(k) for k in ("name", "path", "backend")})
         return redirect(url_for("admin"))
 
     # M6: Hinweis, wenn https-Backend OHNE Zertifikatspruefung gespeichert wird.
     if svc["scheme"] == "https" and not svc["ssl_verify"]:
-        flash(f"Achtung: „{svc['name']}“ nutzt https OHNE Zertifikatsprüfung (MITM möglich).", "error")
+        flash(t("flash.ssl_none_warn", name=svc["name"]), "error")
         _log.warning("Service %s: https mit verify none", svc["name"])
 
     idx = request.form.get("index", "")
     if idx.isdigit() and int(idx) < len(cfg["services"]):
         cfg["services"][int(idx)] = svc
-        flash(f"Service „{svc['name']}“ aktualisiert.", "ok")
+        flash(t("flash.svc_updated", name=svc["name"]), "ok")
         _log.info("Service aktualisiert: %s (%s -> %s)", svc["name"], svc["path"], svc["backend"])
     else:
         cfg["services"].append(svc)
-        flash(f"Service „{svc['name']}“ hinzugefuegt.", "ok")
+        flash(t("flash.svc_added", name=svc["name"]), "ok")
         _log.info("Service hinzugefuegt: %s (%s -> %s)", svc["name"], svc["path"], svc["backend"])
     save_config(cfg)
     return redirect(url_for("admin"))
@@ -852,7 +874,7 @@ def admin_service_delete():
     if idx.isdigit() and int(idx) < len(cfg["services"]):
         removed = cfg["services"].pop(int(idx))
         save_config(cfg)
-        flash(f"Service „{removed.get('name')}“ geloescht.", "ok")
+        flash(_t()("flash.svc_deleted", name=removed.get("name")), "ok")
         _log.info("Service geloescht: %s", removed.get("name"))
     return redirect(url_for("admin"))
 
@@ -862,6 +884,10 @@ def admin_service_delete():
 def admin_theme():
     cfg = load_config()
     cfg["domain"] = request.form.get("domain", cfg["domain"]).strip()
+    lang = request.form.get("language", cfg.get("language", DEFAULT_LANG)).strip()
+    if lang in i18n.available():
+        cfg["language"] = lang
+    t = i18n.translator(cfg.get("language", DEFAULT_LANG))
     theme = cfg["theme"]
     for key in ("title", "subtitle", "background", "background2",
                 "tile_color", "tile_text", "accent"):
@@ -887,10 +913,10 @@ def admin_theme():
         ext = os.path.splitext(upload.filename)[1].lower()
         data = upload.read()
         if ext not in ALLOWED_LOGO_EXT:
-            flash("Logo-Format nicht unterstuetzt (erlaubt: png, jpg, svg, gif, webp, ico).", "error")
+            flash(t("flash.logo_bad_format"), "error")
         elif ext == ".svg" and not _svg_is_safe(data):
             _log.warning("SVG-Upload abgelehnt (aktive Inhalte)")
-            flash("SVG abgelehnt: enthält Skripte/Event-Handler (mögliches XSS).", "error")
+            flash(t("flash.svg_rejected"), "error")
         else:
             old = theme.get("logo")
             if old and old != f"logo{ext}" and (CONFIG_DIR / old).exists():
@@ -902,7 +928,7 @@ def admin_theme():
 
     cfg["theme"] = theme
     save_config(cfg)
-    flash("Erscheinungsbild gespeichert.", "ok")
+    flash(t("flash.theme_saved"), "ok")
     return redirect(url_for("admin"))
 
 

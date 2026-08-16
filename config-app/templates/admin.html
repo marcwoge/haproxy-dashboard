@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <header class="hero hero-admin">
-  <h1>Konfiguration</h1>
-  <p class="subtitle"><a href="/">← zurück zum Dashboard</a></p>
+  <h1>{{ t('admin.title') }}</h1>
+  <p class="subtitle"><a href="/">{{ t('admin.back') }}</a></p>
 </header>
 
 <main class="admin">
@@ -13,9 +13,9 @@
        class="banner {{ 'banner-pending' if not v.is_current else ('banner-ok' if v.ok else 'banner-err') }}">
     <span class="banner-dot"></span>
     <span id="val-text">
-      {% if not v.is_current %}Validierung läuft … (HAProxy prüft die neue Config)
-      {% elif v.ok %}Konfiguration gültig und aktiv ✓
-      {% else %}Konfiguration abgelehnt – HAProxy läuft mit der letzten gültigen Version weiter ✗
+      {% if not v.is_current %}{{ t('banner.pending') }}
+      {% elif v.ok %}{{ t('banner.ok') }}
+      {% else %}{{ t('banner.rejected') }}
       {% endif %}
     </span>
     <pre id="val-message" class="banner-msg">{{ v.message if (v.is_current and not v.ok) else '' }}</pre>
@@ -24,25 +24,25 @@
   {# ----- Update-Kanal ----- #}
   <section class="card" id="updates">
     <div class="log-head">
-      <h2>Updates</h2>
+      <h2>{{ t('update.heading') }}</h2>
       <div class="log-controls">
-        <span class="ver-badge">Version <b id="upd-current">{{ update.current }}</b></span>
+        <span class="ver-badge">{{ t('update.version_label') }} <b id="upd-current">{{ update.current }}</b></span>
         {% if update.auto_update %}
-          <span class="ver-badge auto-on" title="Zeitplan: {{ update.auto_schedule or 'systemd-Timer' }}">
-            ⏱ Auto-Update aktiv{% if update.auto_schedule %} · {{ update.auto_schedule }}{% endif %}</span>
+          <span class="ver-badge auto-on" title="{{ t('update.auto_schedule_title', schedule=update.auto_schedule or 'systemd-Timer') }}">
+            {{ t('update.auto_on') }}{% if update.auto_schedule %} · {{ update.auto_schedule }}{% endif %}</span>
         {% else %}
-          <span class="ver-badge auto-off" title="AUTO_UPDATE=false">⏱ Auto-Update aus</span>
+          <span class="ver-badge auto-off" title="AUTO_UPDATE=false">{{ t('update.auto_off') }}</span>
         {% endif %}
         <form method="post" action="{{ url_for('admin_update_check') }}" style="margin:0">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-sm btn-ghost" type="submit">Nach Updates suchen</button>
+          <button class="btn btn-sm btn-ghost" type="submit">{{ t('update.check_btn') }}</button>
         </form>
         {% if update.mode == 'host-agent' and update.previous %}
         <form method="post" action="{{ url_for('admin_update_rollback') }}" style="margin:0"
-              onsubmit="return confirm('Rollback auf {{ update.previous }}? Die Container werden neu gestartet.');">
+              onsubmit="return confirm('{{ t('update.rollback_confirm', version=update.previous) }}');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-ghost" type="submit"
-                  title="Auf die zuletzt laufende Version zurück">↩ Rollback auf {{ update.previous }}</button>
+                  title="{{ t('update.rollback_title') }}">{{ t('update.rollback_btn', version=update.previous) }}</button>
         </form>
         {% endif %}
       </div>
@@ -54,34 +54,33 @@
       {% elif update.update_available %}
         <div class="banner banner-update">
           <span class="banner-dot"></span>
-          <span>Update verfügbar: <b>{{ update.tag }}</b> (aktuell {{ update.current }})
-            {% if update.url %}– <a href="{{ update.url }}" target="_blank" rel="noopener">Release-Notes</a>{% endif %}
+          <span>{{ t('update.available', tag=update.tag, current=update.current) }}
+            {% if update.url %}– <a href="{{ update.url }}" target="_blank" rel="noopener">{{ t('update.release_notes') }}</a>{% endif %}
           </span>
         </div>
         {% if update.mode == 'host-agent' %}
           <form method="post" action="{{ url_for('admin_update_apply') }}" class="upd-apply"
-                onsubmit="return confirm('Update auf {{ update.tag }} anfordern? Der host-seitige Updater prüft die Signatur und startet mit Healthcheck/Rollback neu.');">
+                onsubmit="return confirm('{{ t('update.apply_confirm', tag=update.tag) }}');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="target" value="{{ update.tag }}">
-            <label class="upd-confirm">Zur Bestätigung Zielversion eintippen (<code>{{ update.tag }}</code>):
+            <label class="upd-confirm">{{ t('update.confirm_label', tag=update.tag) }}
               <input name="confirm" autocomplete="off" placeholder="{{ update.tag }}" required>
             </label>
-            <button class="btn" type="submit">Update anfordern</button>
-            <p class="upd-line upd-hint">Ausführung erfolgt außerhalb der App durch den host-seitigen Updater
-              (Signaturprüfung → Pull → Healthcheck → Rollback bei Fehler).</p>
+            <button class="btn" type="submit">{{ t('update.apply_btn') }}</button>
+            <p class="upd-line upd-hint">{{ t('update.apply_hint') }}</p>
           </form>
         {% else %}
-          <p class="upd-line">Automatik ist deaktiviert (<code>UPDATE_MODE=manual</code>). Zum Aktualisieren auf dem Server ausführen:</p>
+          <p class="upd-line">{{ t('update.manual_hint') }}</p>
           <pre class="cmdbox">{{ update.manual_command }}</pre>
         {% endif %}
       {% else %}
-        <p class="upd-line upd-ok">✓ Du verwendest die aktuelle Version ({{ update.current }}).</p>
+        <p class="upd-line upd-ok">{{ t('update.up_to_date', current=update.current) }}</p>
       {% endif %}
     </div>
 
     {# Audit-Log der Update-Aktionen (append-only) #}
     <details class="upd-audit">
-      <summary>Audit-Log</summary>
+      <summary>{{ t('update.audit') }}</summary>
       <pre id="upd-audit-box" class="logbox" style="height:150px;">{{ update_audit }}</pre>
     </details>
 
@@ -90,10 +89,10 @@
   </section>
 
   <section class="card">
-    <h2>Services</h2>
+    <h2>{{ t('svc.heading') }}</h2>
     <table class="svc-table">
       <thead>
-        <tr><th></th><th>Status</th><th>Name</th><th>Pfad</th><th>Backend</th><th>Schema</th><th>SSL-Prüfung</th><th>Aktiv</th><th></th></tr>
+        <tr><th></th><th>{{ t('svc.col_status') }}</th><th>{{ t('svc.col_name') }}</th><th>{{ t('svc.col_path') }}</th><th>{{ t('svc.col_backend') }}</th><th>{{ t('svc.col_scheme') }}</th><th>{{ t('svc.col_ssl') }}</th><th>{{ t('svc.col_enabled') }}</th><th></th></tr>
       </thead>
       <tbody>
       {% for s in services %}
@@ -107,227 +106,241 @@
           <td><code>{{ s.path }}</code></td>
           <td><code>{{ s.backend }}</code></td>
           <td>{{ s.scheme or 'http' }}</td>
-          <td>{{ 'ja' if s.ssl_verify else 'nein' }}</td>
+          <td>{{ t('common.yes') if s.ssl_verify else t('common.no') }}</td>
           <td>{{ '✓' if s.enabled else '–' }}</td>
           <td class="actions">
-            <a class="btn btn-sm" href="{{ url_for('admin', edit=loop.index0) }}">Bearbeiten</a>
+            <a class="btn btn-sm" href="{{ url_for('admin', edit=loop.index0) }}">{{ t('common.edit') }}</a>
             <form method="post" action="{{ url_for('admin_service_delete') }}"
-                  onsubmit="return confirm('Service „{{ s.name }}“ wirklich löschen?');">
+                  onsubmit="return confirm('{{ t('svc.delete_confirm', name=s.name) }}');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="index" value="{{ loop.index0 }}">
-              <button class="btn btn-sm btn-danger" type="submit">Löschen</button>
+              <button class="btn btn-sm btn-danger" type="submit">{{ t('common.delete') }}</button>
             </form>
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="9" class="muted">Noch keine Services.</td></tr>
+        <tr><td colspan="9" class="muted">{{ t('svc.empty') }}</td></tr>
       {% endfor %}
       </tbody>
     </table>
     {% if stats_error %}
-    <p class="hint">Backend-Status z. Zt. nicht abrufbar ({{ stats_error }}).</p>
+    <p class="hint">{{ t('svc.stats_error', error=stats_error) }}</p>
     {% endif %}
   </section>
 
   <section class="card">
-    <h2>{{ 'Service bearbeiten' if edit_service else 'Service hinzufügen' }}</h2>
+    <h2>{{ t('svc.edit_title') if edit_service else t('svc.add_title') }}</h2>
     <form method="post" action="{{ url_for('admin_service') }}" class="form-grid">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if edit_idx is not none %}<input type="hidden" name="index" value="{{ edit_idx }}">{% endif %}
       {% set e = edit_service or {} %}
-      <label>Name (Kachelbeschriftung)
+      <label>{{ t('svc.f_name') }}
         <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
       </label>
-      <label>Pfad
+      <label>{{ t('svc.f_path') }}
         <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
       </label>
-      <label>Backend (Container:Port oder Host:Port / IP:Port)
+      <label>{{ t('svc.f_backend') }}
         <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
       </label>
-      <label>Schema (HAProxy → Backend)
+      <label>{{ t('svc.f_scheme') }}
         <select name="scheme">
           <option value="http" {{ 'selected' if (e.scheme or 'http')=='http' }}>http</option>
           <option value="https" {{ 'selected' if e.scheme=='https' }}>https</option>
         </select>
       </label>
-      <label>Icon (Emoji oder Zeichen)
+      <label>{{ t('svc.f_icon') }}
         <input name="icon" value="{{ e.icon or '' }}" placeholder="🗑️">
       </label>
-      <label>Kachelfarbe (optional)
+      <label>{{ t('svc.f_color') }}
         <input name="color" type="text" value="{{ e.color or '' }}" placeholder="#22c55e">
       </label>
-      <label class="full">Beschreibung (optional)
+      <label class="full">{{ t('svc.f_desc') }}
         <input name="description" value="{{ e.description or '' }}" placeholder="Abfallmanagement-Anwendung">
       </label>
       <label class="check">
         <input type="checkbox" name="ssl_verify" {{ 'checked' if (e.ssl_verify if edit_service else True) }}>
-        SSL-Zertifikat des Backends prüfen <em>(empfohlen)</em>
+        {{ t('svc.f_ssl') }} <em>{{ t('common.recommended') }}</em>
       </label>
-      <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">
-        ⚠ Nur abschalten, wenn das Backend ein selbstsigniertes Zertifikat nutzt –
-        ohne Prüfung ist die Verbindung zum Backend gegen MITM angreifbar (nur bei https relevant).</p>
+      <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.ssl_warn') }}</p>
       <label class="check">
         <input type="checkbox" name="strip_path" {{ 'checked' if e.strip_path }}>
-        Pfad-Präfix vor Weiterleitung entfernen
+        {{ t('svc.f_strip') }}
       </label>
       <label class="check">
         <input type="checkbox" name="enabled" {{ 'checked' if (e.enabled if edit_service else True) }}>
-        Aktiv
+        {{ t('svc.f_enabled') }}
       </label>
       <div class="full form-actions">
-        <button class="btn" type="submit">Speichern</button>
-        {% if edit_service %}<a class="btn btn-ghost" href="{{ url_for('admin') }}">Abbrechen</a>{% endif %}
+        <button class="btn" type="submit">{{ t('common.save') }}</button>
+        {% if edit_service %}<a class="btn btn-ghost" href="{{ url_for('admin') }}">{{ t('common.cancel') }}</a>{% endif %}
       </div>
     </form>
   </section>
 
   <section class="card">
-    <h2>Erscheinungsbild & Domain</h2>
+    <h2>{{ t('theme.heading') }}</h2>
     <form method="post" action="{{ url_for('admin_theme') }}" class="form-grid"
           enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Domain
+      <label>{{ t('common.language') }}
+        <select name="language">
+          {% for code, label in languages %}
+          <option value="{{ code }}" {{ 'selected' if code == lang }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>{{ t('theme.domain') }}
         <input name="domain" value="{{ cfg.domain }}" placeholder="platform.example.local">
       </label>
-      <label>Titel
+      <label>{{ t('theme.title_f') }}
         <input name="title" value="{{ theme.title }}">
       </label>
-      <label>Untertitel
+      <label>{{ t('theme.subtitle_f') }}
         <input name="subtitle" value="{{ theme.subtitle }}">
       </label>
-      <label>Kacheln pro Reihe
+      <label>{{ t('theme.columns') }}
         <input name="columns" type="number" min="1" max="8" value="{{ theme.columns }}">
       </label>
       <label class="check">
         <input type="checkbox" name="show_status" {{ 'checked' if theme.show_status }}>
-        Backend-Status auf dem Dashboard anzeigen
+        {{ t('theme.show_status') }}
       </label>
-      <label>Hintergrund oben
+      <label>{{ t('theme.bg1') }}
         <input name="background" type="color" value="{{ theme.background }}">
       </label>
-      <label>Hintergrund unten
+      <label>{{ t('theme.bg2') }}
         <input name="background2" type="color" value="{{ theme.background2 }}">
       </label>
-      <label>Kachelfarbe
+      <label>{{ t('theme.tile_color') }}
         <input name="tile_color" type="color" value="{{ theme.tile_color }}">
       </label>
-      <label>Kachel-Textfarbe
+      <label>{{ t('theme.tile_text') }}
         <input name="tile_text" type="color" value="{{ theme.tile_text }}">
       </label>
-      <label>Akzentfarbe
+      <label>{{ t('theme.accent') }}
         <input name="accent" type="color" value="{{ theme.accent }}">
       </label>
 
-      <label class="full">Logo hochladen (png, jpg, svg, gif, webp, ico)
+      <label class="full">{{ t('theme.logo_upload') }}
         <input name="logo_file" type="file" accept="image/*">
       </label>
       {% if logo_url %}
       <div class="logo-preview">
-        <span>Aktuelles Logo:</span>
+        <span>{{ t('theme.logo_current') }}</span>
         <img src="{{ logo_url }}" alt="Logo" style="height: 40px;">
         <label class="check">
-          <input type="checkbox" name="remove_logo"> entfernen
+          <input type="checkbox" name="remove_logo"> {{ t('common.remove') }}
         </label>
       </div>
       {% endif %}
-      <label>Logo-Höhe (px)
+      <label>{{ t('theme.logo_height') }}
         <input name="logo_height" type="number" min="16" max="400" value="{{ theme.logo_height }}">
       </label>
 
       <div class="full form-actions">
-        <button class="btn" type="submit">Erscheinungsbild speichern</button>
+        <button class="btn" type="submit">{{ t('theme.save') }}</button>
       </div>
     </form>
   </section>
 
-  <p class="hint">Änderungen werden sofort gespeichert; HAProxy übernimmt neue
-    Routen automatisch innerhalb weniger Sekunden.</p>
+  <p class="hint">{{ t('admin.autosave_hint') }}</p>
 
   {# ----- Benachrichtigungen ----- #}
   <section class="card" id="notify">
-    <h2>Benachrichtigungen</h2>
+    <h2>{{ t('notify.heading') }}</h2>
     {% set nf = cfg.notifications %}
     <form method="post" action="{{ url_for('admin_notify') }}" class="form-grid">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="check full">
         <input type="checkbox" name="enabled" {{ 'checked' if nf.enabled }}>
-        Benachrichtigungen aktiv
+        {{ t('notify.enabled') }}
       </label>
 
-      <label class="full"><b>Ereignisse</b></label>
-      <label class="check"><input type="checkbox" name="ev_update_available" {{ 'checked' if nf.events.update_available }}> Update verfügbar</label>
-      <label class="check"><input type="checkbox" name="ev_update_result" {{ 'checked' if nf.events.update_result }}> Update-Ergebnis</label>
-      <label class="check"><input type="checkbox" name="ev_backend_down" {{ 'checked' if nf.events.backend_down }}> Backend DOWN</label>
+      <label class="full"><b>{{ t('notify.events') }}</b></label>
+      <label class="check"><input type="checkbox" name="ev_update_available" {{ 'checked' if nf.events.update_available }}> {{ t('notify.ev_update_available') }}</label>
+      <label class="check"><input type="checkbox" name="ev_update_result" {{ 'checked' if nf.events.update_result }}> {{ t('notify.ev_update_result') }}</label>
+      <label class="check"><input type="checkbox" name="ev_backend_down" {{ 'checked' if nf.events.backend_down }}> {{ t('notify.ev_backend_down') }}</label>
 
-      <label class="full"><b>E-Mail</b></label>
-      <label>Versandart
+      <label class="full"><b>{{ t('notify.email') }}</b></label>
+      <label>{{ t('notify.mode') }}
         <select name="email_mode">
-          <option value="smtp" {{ 'selected' if nf.email_mode=='smtp' }}>SMTP-Host (Relay, empfohlen)</option>
-          <option value="direct" {{ 'selected' if nf.email_mode=='direct' }}>Direktversand (Server stellt selbst zu)</option>
+          <option value="smtp" {{ 'selected' if nf.email_mode=='smtp' }}>{{ t('notify.mode_smtp') }}</option>
+          <option value="direct" {{ 'selected' if nf.email_mode=='direct' }}>{{ t('notify.mode_direct') }}</option>
         </select>
       </label>
-      <label>Empfänger (kommagetrennt)
+      <label>{{ t('notify.to') }}
         <input name="to_addrs" value="{{ nf.to_addrs }}" placeholder="admin@example.com">
       </label>
-      <label>Absender (From)
+      <label>{{ t('notify.from') }}
         <input name="from_addr" value="{{ nf.from_addr }}" placeholder="dashboard@example.com">
       </label>
-      <label>SMTP-Host <span class="upd-hint">(nur bei „SMTP-Host")</span>
+      <label>{{ t('notify.smtp_host') }} <span class="upd-hint">{{ t('notify.smtp_host_hint') }}</span>
         <input name="smtp_host" value="{{ nf.smtp_host }}" placeholder="smtp.example.com">
       </label>
-      <label>SMTP-Port
+      <label>{{ t('notify.smtp_port') }}
         <input name="smtp_port" type="number" min="1" max="65535" value="{{ nf.smtp_port }}">
       </label>
-      <label>Sicherheit
+      <label>{{ t('notify.security') }}
         <select name="smtp_security">
           <option value="starttls" {{ 'selected' if nf.smtp_security=='starttls' }}>STARTTLS</option>
           <option value="ssl" {{ 'selected' if nf.smtp_security=='ssl' }}>SSL/TLS</option>
-          <option value="none" {{ 'selected' if nf.smtp_security=='none' }}>keine</option>
+          <option value="none" {{ 'selected' if nf.smtp_security=='none' }}>{{ t('notify.sec_none') }}</option>
         </select>
       </label>
-      <label>SMTP-Benutzer
+      <label>{{ t('notify.smtp_user') }}
         <input name="smtp_user" value="{{ nf.smtp_user }}" autocomplete="off">
       </label>
-      <label>SMTP-Passwort
+      <label>{{ t('notify.smtp_password') }}
         <input name="smtp_password" type="password" autocomplete="new-password"
-               placeholder="{{ '•••••• (gesetzt – leer = unverändert)' if nf.smtp_password else '' }}">
+               placeholder="{{ t('notify.pw_placeholder') if nf.smtp_password else '' }}">
       </label>
 
-      <label class="full"><b>Webhook</b> (optional)</label>
-      <label class="full">Webhook-URL (POST JSON bei jedem Ereignis)
+      <label class="full"><b>{{ t('notify.webhook') }}</b> {{ t('common.optional') }}</label>
+      <label class="full">{{ t('notify.webhook_url') }}
         <input name="webhook_url" value="{{ nf.webhook_url }}" placeholder="https://hooks.example.com/…">
       </label>
 
       <div class="full form-actions">
-        <button class="btn" type="submit">Speichern</button>
-        <button class="btn btn-ghost" type="submit" formaction="{{ url_for('admin_notify_test') }}">Testnachricht senden</button>
+        <button class="btn" type="submit">{{ t('common.save') }}</button>
+        <button class="btn btn-ghost" type="submit" formaction="{{ url_for('admin_notify_test') }}">{{ t('notify.test_btn') }}</button>
       </div>
-      <p class="upd-hint full">Direktversand ist bequem, wird aber oft von Providern
-        (Port 25 gesperrt) oder Spam-Filtern (fehlendes PTR/SPF/DKIM) blockiert –
-        für zuverlässige Zustellung einen SMTP-Host verwenden.</p>
+      <p class="upd-hint full">{{ t('notify.direct_hint') }}</p>
     </form>
   </section>
 
   <section class="card">
     <div class="log-head">
-      <h2>Logs</h2>
+      <h2>{{ t('logs.heading') }}</h2>
       <div class="log-controls">
         <select id="log-which">
           <option value="haproxy">HAProxy</option>
           <option value="app">config-app</option>
         </select>
         <select id="log-lines">
-          <option value="100">100 Zeilen</option>
-          <option value="200" selected>200 Zeilen</option>
-          <option value="500">500 Zeilen</option>
+          <option value="100">{{ t('logs.lines', n=100) }}</option>
+          <option value="200" selected>{{ t('logs.lines', n=200) }}</option>
+          <option value="500">{{ t('logs.lines', n=500) }}</option>
         </select>
-        <label class="check"><input type="checkbox" id="log-auto" checked> Auto-Refresh</label>
-        <button class="btn btn-sm btn-ghost" id="log-refresh" type="button">Neu laden</button>
+        <label class="check"><input type="checkbox" id="log-auto" checked> {{ t('logs.auto') }}</label>
+        <button class="btn btn-sm btn-ghost" id="log-refresh" type="button">{{ t('logs.reload') }}</button>
       </div>
     </div>
-    <pre id="logbox" class="logbox">Lade …</pre>
+    <pre id="logbox" class="logbox">{{ t('common.loading') }}</pre>
   </section>
 
 </main>
+<script>
+  window.I18N = {
+    banner_pending: {{ t('banner.pending')|tojson }},
+    banner_ok: {{ t('banner.ok')|tojson }},
+    banner_rejected: {{ t('banner.rejected')|tojson }},
+    empty: {{ t('common.empty')|tojson }},
+    loading: {{ t('common.loading')|tojson }},
+    audit_empty: {{ t('update.audit_empty')|tojson }},
+    pending_title: {{ t('update.pending_title')|tojson }},
+    last_result: {{ t('update.last_result', state='')|tojson }}
+  };
+</script>
 <script src="{{ url_for('static', filename='admin.js') }}"></script>
 {% endblock %}

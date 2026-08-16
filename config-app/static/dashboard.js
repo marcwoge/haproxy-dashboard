@@ -1,6 +1,7 @@
 // Live-Aktualisierung der Backend-Status-Punkte auf dem Dashboard.
 (function () {
   "use strict";
+  var I18N = window.I18N || {};
   var grid = document.querySelector(".grid[data-show-status='1']");
   if (!grid) return;
 
@@ -11,7 +12,7 @@
       var dot = tile.querySelector(".tile-status");
       if (!dot) return;
       dot.className = "tile-status dot dot-" + (s.dot || "unknown");
-      dot.title = "Status: " + (s.dot || "unbekannt");
+      dot.title = (I18N.status || "Status") + ": " + (s.dot || I18N.unknown || "unknown");
     });
   }
 
