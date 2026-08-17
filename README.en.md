@@ -138,6 +138,46 @@ or permanently add the external `acme-platform` network to its `docker-compose.y
 - **on**: HAProxy cuts off `/abfallmanager`, the backend sees `/...`.
   Correct for apps that insist on running at `/`.
 
+### Onboard automatically: the Platform Connector (sidecar)
+
+Instead of adding the service manually in the admin GUI, you can drop a small
+**connector container** into your other project's compose. It registers the service
+itself on start (tile + route) and deregisters on stop — so the tile appears and
+disappears together with your project.
+
+Prerequisite: set a **`CONNECTOR_TOKEN`** in the platform's `.env` (empty = the API
+is disabled). The recommended **`proxy` mode** keeps your app on its own network, so
+you change **nothing** about it:
+
+```yaml
+services:
+  billing-app:
+    image: yourproject/billing            # unchanged
+
+  platform-connector:
+    image: ghcr.io/your-org/haproxy-dashboard/connector:latest
+    container_name: billing-connector
+    environment:
+      PLATFORM_API:   https://platform.example.local
+      PLATFORM_TOKEN: ${CONNECTOR_TOKEN}
+      MODE:           proxy
+      SERVICE_NAME:   "Billing"
+      SERVICE_PATH:   /billing
+      SERVICE_TARGET: billing-app:8080     # your app on the project network
+      CONNECTOR_HOST: billing-connector    # = container_name
+      SERVICE_ICON:   "💳"
+      INSECURE:       "true"               # only if the platform uses a self-signed cert
+    networks: [default, acme-platform]
+    restart: unless-stopped
+
+networks:
+  acme-platform: { external: true }
+```
+
+There is also a **`register` mode** (your app joins the shared network, no extra
+hop). For all variables, both modes and details see
+[`connector/README.md`](connector/README.md).
+
 ---
 
 ## 4. Appearance
