@@ -1,0 +1,60 @@
+# Dependabot keeps dependencies up to date by opening pull requests.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# Covered here:
+#   - Python packages   (config-app/requirements.txt)
+#   - GitHub Actions     (.github/workflows/*)
+#   - Docker base images (config-app/Dockerfile, haproxy/Dockerfile)
+#
+# Security fixes (e.g. a Flask CVE) are opened automatically and individually,
+# independent of the weekly schedule below. Routine minor/patch bumps are grouped
+# into a single PR per ecosystem to keep the noise down.
+version: 2
+updates:
+  # ---- Python dependencies (Flask, waitress, PyYAML, dnspython) -------------
+  - package-ecosystem: "pip"
+    directory: "/config-app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Bundle low-risk updates; major bumps still arrive as individual PRs.
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # ---- GitHub Actions used by the release workflow --------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # ---- Docker base images (config-app + haproxy) ----------------------------
+  - package-ecosystem: "docker"
+    directories:
+      - "/config-app"
+      - "/haproxy"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "docker"
+    groups:
+      docker-images:
+        patterns: ["*"]
