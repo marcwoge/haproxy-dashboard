@@ -8,49 +8,50 @@ services:
     container_name: acme-config-app
     environment:
       - PLATFORM_DOMAIN=${PLATFORM_DOMAIN:-platform.example.local}
+      - PLATFORM_LANG=${PLATFORM_LANG:-de}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-      # Brute-Force-Schutz am Login (H2)
+      # Brute-force protection on the login (H2)
       - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-5}
       - LOGIN_WINDOW=${LOGIN_WINDOW:-300}
       - LOGIN_LOCKOUT=${LOGIN_LOCKOUT:-300}
-      # HSTS (N2) - nur mit echtem Zertifikat aktivieren
+      # HSTS (N2) - enable only with a real certificate
       - ENABLE_HSTS=${ENABLE_HSTS:-false}
       - HSTS_MAX_AGE=${HSTS_MAX_AGE:-31536000}
-      # Getrennte, hoehere Rolle fuer system.update (RBAC). Leer = faellt auf Admin zurueck.
+      # Separate, higher role for system.update (RBAC). Empty = falls back to admin.
       - PLATFORM_ADMIN_USER=${PLATFORM_ADMIN_USER:-}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-}
       - CONFIG_DIR=/app/config
       - HAPROXY_OUT=/app/haproxy_out
       - UPDATE_DIR=/app/update
-      # APP_VERSION wird NICHT hier gesetzt - es ist im Image gebacken (build-arg),
-      # damit ein gepulltes GHCR-Image seine echte Release-Version meldet.
+      # APP_VERSION is NOT set here - it is baked into the image (build arg),
+      # so a pulled GHCR image reports its real release version.
       - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}
       - UPDATE_TOKEN=${UPDATE_TOKEN:-}
       - UPDATE_MODE=${UPDATE_MODE:-manual}
-      # Nur zur Anzeige im Admin-GUI (der Zeitplan selbst laeuft host-seitig als systemd-Timer)
+      # Display only in the admin GUI (the schedule itself runs host-side as a systemd timer)
       - AUTO_UPDATE=${AUTO_UPDATE:-false}
       - AUTO_UPDATE_SCHEDULE=${AUTO_UPDATE_SCHEDULE:-}
       - TZ=${TZ:-Europe/Berlin}
     volumes:
-      # services.yaml + Theme (auf dem Host einsehbar/editierbar)
+      # services.yaml + theme (viewable/editable on the host)
       - ./data/config:/app/config
-      # generierte haproxy.cfg (mit haproxy-Container geteilt)
+      # generated haproxy.cfg (shared with the haproxy container)
       - ./data/haproxy:/app/haproxy_out
-      # Update-Anforderung/Ergebnis/Audit - Host-Bind, damit der HOST-seitige
-      # Updater (systemd) die Anforderung liest. config-app schreibt hier NUR
-      # eine Anforderung; es hat KEINEN Docker-Socket und fuehrt nie Docker aus.
+      # update request/result/audit - host bind so the HOST-side updater
+      # (systemd) can read the request. config-app ONLY writes a request here;
+      # it has NO Docker socket and never runs Docker.
       - ./data/update:/app/update
-    # KEIN Docker-Socket - bewusst. Privilegierte Aktionen laufen ausschliesslich
-    # im host-seitigen Updater ausserhalb der Container-Vertrauensgrenze.
+    # NO Docker socket - deliberately. Privileged actions run exclusively in the
+    # host-side updater, outside the container trust boundary.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/healthz').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    # M1: Container-Haertung. Python-App braucht keine Linux-Capabilities; das
-    # Root-FS ist read-only (Schreiben nur in die gemounteten Volumes + /tmp).
+    # M1: container hardening. The Python app needs no Linux capabilities; the
+    # root FS is read-only (writes only into the mounted volumes + /tmp).
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -74,17 +75,17 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # Hier deine .crt + .key ablegen (read-only)
+      # place your .crt + .key here (read-only)
       - ./certs:/certs:ro
-      # geteilte generierte Config
+      # shared generated config
       - ./data/haproxy:/etc/haproxy/dynamic
-    # Erlaubt Backends per host-published Port zu erreichen: im GUI als Backend
-    # "host.docker.internal:PORT" eintragen. (Auf Docker Desktop automatisch;
-    # unter Linux liefert dieser Eintrag die noetige Host-Gateway-Aufloesung.)
+    # Lets you reach backends via a host-published port: enter the backend in the
+    # GUI as "host.docker.internal:PORT". (Automatic on Docker Desktop; on Linux
+    # this entry provides the required host-gateway resolution.)
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # M1: Haertung. HAProxy braucht nur NET_BIND_SERVICE (Ports 80/443); alle
-    # anderen Capabilities werden entzogen und Privilege-Escalation unterbunden.
+    # M1: hardening. HAProxy only needs NET_BIND_SERVICE (ports 80/443); all
+    # other capabilities are dropped and privilege escalation is prevented.
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -95,9 +96,9 @@ services:
       - platform
     restart: unless-stopped
 
-# Gemeinsames Netz. Deine Anwendungs-Container koennen diesem Netz beitreten,
-# dann erreicht HAProxy sie ueber den Container-Namen (z.B. abfallmanager:8080).
-# Alternativ gibst du pro Kachel einfach Host:Port / IP:Port an.
+# Shared network. Your application containers can join this network, then HAProxy
+# reaches them by container name (e.g. abfallmanager:8080). Alternatively, just
+# enter host:port / ip:port per tile.
 networks:
   platform:
     name: acme-platform

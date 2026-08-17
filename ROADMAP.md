@@ -1,5 +1,7 @@
 # Roadmap
 
+**Sprache / Language:** Deutsch (dieses Dokument) · [English](ROADMAP.en.md)
+
 ## Erledigt
 - [x] HAProxy Reverse Proxy mit TLS auf konfigurierbarer Domain
 - [x] Kachel-Dashboard mit konfigurierbarem Design + Logo

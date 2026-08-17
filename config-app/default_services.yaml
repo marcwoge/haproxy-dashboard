@@ -1,30 +1,30 @@
 # ============================================================
-#  Acme Platform - Service- und Theme-Konfiguration
-#  Wird beim ersten Start nach ./data/config/services.yaml kopiert.
-#  Editierbar ueber das Admin-GUI (/admin) ODER direkt hier.
+#  Acme Platform - service and theme configuration
+#  Copied to ./data/config/services.yaml on first start.
+#  Editable via the admin GUI (/admin) OR directly here.
 # ============================================================
 domain: platform.example.local
-language: de                  # Oberflaechensprache (de, en, ...) - siehe config-app/lang/
+language: de                  # UI language (de, en, ...) - see config-app/lang/
 
 theme:
   title: "Acme Platform"
   subtitle: "Service Dashboard"
-  background: "#0f172a"      # Seitenhintergrund (oben)
-  background2: "#1e293b"     # Seitenhintergrund (unten, Verlauf)
-  tile_color: "#1e293b"      # Standard-Kachelfarbe
-  tile_text: "#f1f5f9"       # Textfarbe auf Kacheln
-  accent: "#38bdf8"          # Akzentfarbe (Titel, Rahmen)
-  columns: 4                 # Anzahl Kacheln pro Reihe (max.)
-  logo: ""                   # Dateiname im config-Ordner (per GUI hochladen)
-  logo_height: 64            # Anzeigehoehe des Logos in Pixeln
-  show_status: true          # Backend-Status (UP/DOWN) auf dem Dashboard anzeigen
+  background: "#0f172a"      # page background (top)
+  background2: "#1e293b"     # page background (bottom, gradient)
+  tile_color: "#1e293b"      # default tile color
+  tile_text: "#f1f5f9"       # text color on tiles
+  accent: "#38bdf8"          # accent color (title, borders)
+  columns: 4                 # number of tiles per row (max.)
+  logo: ""                   # file name in the config folder (upload via GUI)
+  logo_height: 64            # display height of the logo in pixels
+  show_status: true          # show backend status (UP/DOWN) on the dashboard
 
-# Benachrichtigungen (E-Mail/Webhook) - am einfachsten im Admin-GUI konfigurieren.
+# Notifications (email/webhook) - easiest to configure in the admin GUI.
 notifications:
   enabled: false
-  email_mode: smtp           # smtp (Relay ueber Host) | direct (Selbstversand via MX)
+  email_mode: smtp           # smtp (relay via host) | direct (self-delivery via MX)
   from_addr: ""
-  to_addrs: ""               # kommagetrennte Empfaenger
+  to_addrs: ""               # comma-separated recipients
   smtp_host: ""
   smtp_port: 587
   smtp_user: ""
@@ -39,11 +39,11 @@ notifications:
 services:
   - name: "Example Service"
     path: "/example"
-    backend: "example-app:8080"     # Container-Name:Port  ODER  host:port / ip:port
-    scheme: "http"                  # http | https (wie HAProxy mit dem Backend spricht)
-    ssl_verify: false               # nur bei scheme=https relevant
-    strip_path: false               # /example vor Weiterleitung entfernen?
+    backend: "example-app:8080"     # container-name:port  OR  host:port / ip:port
+    scheme: "http"                  # http | https (how HAProxy talks to the backend)
+    ssl_verify: false               # only relevant for scheme=https
+    strip_path: false               # strip /example before forwarding?
     icon: "📦"
-    color: "#22c55e"                # optionale Kachelfarbe (leer = Standard)
-    description: "Beispiel-Anwendung (im Admin-GUI anpassen)"
+    color: "#22c55e"                # optional tile color (empty = default)
+    description: "Example application (adjust in the admin GUI)"
     enabled: true

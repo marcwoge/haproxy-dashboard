@@ -1,20 +1,20 @@
-SSL-Zertifikat hier ablegen
-===========================
+Place your SSL certificate here
+===============================
 
-Lege deine beiden Dateien in DIESEN Ordner:
+Put your two files into THIS folder:
 
-  - Zertifikat:  platform.crt   (oder fullchain.pem / *.crt / *.pem)
-  - Schluessel:  platform.key   (oder privkey.pem / *.key)
+  - Certificate:  platform.crt   (or fullchain.pem / *.crt / *.pem)
+  - Private key:  platform.key   (or privkey.pem / *.key)
 
-Beim Start des haproxy-Containers wird daraus automatisch das von HAProxy
-benoetigte kombinierte PEM gebaut (Zertifikat + Chain + privater Schluessel).
-Du musst NICHTS manuell zusammenfuegen.
+When the haproxy container starts, it automatically builds the combined PEM
+that HAProxy needs (certificate + chain + private key). You do NOT have to
+concatenate anything manually.
 
-Wird KEIN Zertifikat gefunden, erzeugt der Container automatisch ein
-selbstsigniertes Zertifikat fuer deine Domain (nur fuer Tests).
+If NO certificate is found, the container automatically generates a
+self-signed certificate for your domain (for testing only).
 
-Wichtig:
-  - Hat dein Zertifikat eine Zwischenkette (CA-Bundle), nutze am besten eine
-    fullchain.pem (Server-Zert + Zwischenzertifikate in EINER Datei) als .crt.
-  - Nach dem Austausch des Zertifikats den haproxy-Container neu starten:
+Important:
+  - If your certificate has an intermediate chain (CA bundle), it is best to use
+    a fullchain.pem (server cert + intermediates in ONE file) as the .crt.
+  - After replacing the certificate, restart the haproxy container:
         docker compose restart haproxy
