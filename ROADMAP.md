@@ -27,6 +27,32 @@
 - [x] Rollback auf vorherige Version per Klick (Admin-Knopf, host-agent, gleicher sicherer Pfad)
 - [x] Health-/Update-Benachrichtigung per E-Mail/Webhook (SMTP-Relay ODER
       Direktversand via MX, + Webhook; Ereignisse einzeln schaltbar, im Admin)
+- [ ] **Platform-Connector** – Sidecar zum Self-Service-Einbinden fremder
+      Compose-Projekte (Cloudflare-Tunnel-Gefühl, aber ohne Tunnel, da gleicher Host):
+  - [ ] **Auto-Registrierung**: meldet den Service beim Start per API bei der
+        config-app an (Name/Pfad/Backend/Icon aus env) und **beim Stop wieder ab**
+        → Kachel erscheint/verschwindet mit dem Projekt.
+  - [ ] **Optionaler Gateway-/Proxy-Modus**: sitzt auf Plattform- und Projekt-Netz
+        und proxyt TCP zum App-Container, sodass die App dem geteilten Netz **nicht**
+        beitreten muss (mehr Isolation; Backend = `connector:port`).
+  - [ ] **Veröffentlichung** als Image auf GHCR/Docker Hub
+        (`image: …/connector:latest`), Konfiguration rein über env – Drop-in.
+  - [ ] Alternativen zuerst prüfen: bei wenigen Services genügt das dokumentierte
+        „externes Netz + GUI"-Verfahren; bei **anderem Host/NAT** kein Eigenbau,
+        sondern frp/inlets/WireGuard/cloudflared.
+
+  **Sicherheit des Connectors** (zwingend – Auto-Registrierung ist eine Angriffsfläche):
+  - [ ] **Dediziertes Maschinen-Token** (nicht das Admin-Passwort), scoped nur auf
+        „Service registrieren/abmelden", pro Connector widerrufbar.
+  - [ ] **Strikte Validierung** der Registrierungsdaten mit derselben Logik wie im GUI
+        (K2: Pfad/Backend gegen Config-Injection); Ziel gegen eine Whitelist prüfen
+        (kein Biegen auf beliebige interne Hosts / SSRF).
+  - [ ] **Rate-Limit** + **Audit-Log-Eintrag** je Registrierung/Abmeldung (Actor = Token-ID).
+  - [ ] **Kein Docker-Socket** – der Sidecar deklariert sich selbst per HTTPS
+        (konsistent zum „kein Socket in netz-/app-Container"-Prinzip).
+  - [ ] Registrierungs-API **getrennt von der Menschen-Admin-Auth**: eigener Endpunkt
+        `POST /api/register` / `/deregister`, nur Token (kein CSRF/Session).
+  - [ ] **TLS-Verifikation** Connector→config-app (bei self-signed: CA-Bundle/Pinning).
 
 ## Sicherheit & Härtung (aus Security-Audit)
 
