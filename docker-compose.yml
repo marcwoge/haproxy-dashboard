@@ -21,6 +21,8 @@ services:
       # Separate, higher role for system.update (RBAC). Empty = falls back to admin.
       - PLATFORM_ADMIN_USER=${PLATFORM_ADMIN_USER:-}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-}
+      # Platform Connector API (opt-in). Empty = /api/v1/* disabled.
+      - CONNECTOR_TOKEN=${CONNECTOR_TOKEN:-}
       - CONFIG_DIR=/app/config
       - HAPROXY_OUT=/app/haproxy_out
       - UPDATE_DIR=/app/update

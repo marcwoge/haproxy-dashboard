@@ -64,6 +64,11 @@ ADMIN_PASSWORD = _secret("ADMIN_PASSWORD", "")  # leer = Admin-GUI gesperrt (H1)
 PLATFORM_ADMIN_USER = _secret("PLATFORM_ADMIN_USER", "")
 PLATFORM_ADMIN_PASSWORD = _secret("PLATFORM_ADMIN_PASSWORD", "")
 
+# Platform-Connector API (opt-in): dediziertes Maschinen-Token fuer die
+# Auto-Registrierung von Services durch Connector-Sidecars. Leer = API deaktiviert.
+# Getrennt vom Admin-Passwort; nur fuer Registrierung/Abmeldung, kein GUI-Zugriff.
+CONNECTOR_TOKEN = _secret("CONNECTOR_TOKEN", "")
+
 # H1: bekannte triviale Passwoerter, die (falls gesetzt) laut angemahnt werden.
 WEAK_PASSWORDS = {
     "changeme", "change-me", "password", "passwort", "admin", "administrator",
@@ -124,6 +129,10 @@ class LoginRateLimiter:
 
 
 _limiter = LoginRateLimiter(LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW, LOGIN_LOCKOUT)
+# Eigener Brute-Force-Schutz fuer die Connector-API (fehlgeschlagene Token-Auth je IP).
+_api_limiter = LoginRateLimiter(LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW, LOGIN_LOCKOUT)
+# Serialisiert Read-Modify-Write der Connector-API (getrennt von save_config()'s _lock).
+_api_lock = threading.Lock()
 
 DEFAULT_THEME = {
     "title": "Acme Platform",
@@ -244,7 +253,9 @@ def _inject_i18n():
 
 @app.before_request
 def _csrf_protect():
-    if request.method == "POST":
+    # /api/* ist eine Maschinen-Schnittstelle mit Bearer-Token (kein Browser,
+    # keine Session) -> CSRF gilt hier nicht und wuerde Connector-POSTs blockieren.
+    if request.method == "POST" and not request.path.startswith("/api/"):
         sent = request.form.get("csrf_token", "")
         expected = session.get("_csrf", "")
         if not expected or not hmac.compare_digest(str(expected), str(sent)):
@@ -937,6 +948,143 @@ def admin_theme():
 
 
 # ----------------------------------------------------------------------------
+# Platform-Connector API (Phase 1): Maschinen-Schnittstelle zur Auto-Registrierung.
+# Auth per Bearer-Token (CONNECTOR_TOKEN), getrennt von der Menschen-Admin-Auth
+# und von CSRF ausgenommen. Registrierte Services tragen source="connector" und
+# koennen nur von der API (nicht versehentlich) ueberschrieben/entfernt werden.
+# ----------------------------------------------------------------------------
+def _json_error(code: str, status: int, **extra):
+    body = {"status": "error", "error": code}
+    body.update(extra)
+    return body, status
+
+
+def _service_from_json(data: dict) -> dict:
+    """Baut einen Service-Dict aus dem JSON einer Connector-Anfrage (analog
+    _service_from_form) und markiert ihn als vom Connector verwaltet."""
+    def _s(key: str) -> str:
+        v = data.get(key, "")
+        return v.strip() if isinstance(v, str) else str(v or "")
+    return {
+        "name": _s("name"),
+        "path": _norm_path(str(data.get("path", ""))),
+        "backend": _s("backend"),
+        "scheme": (str(data.get("scheme", "http")).strip().lower() or "http"),
+        "ssl_verify": bool(data.get("ssl_verify", False)),
+        "strip_path": bool(data.get("strip_path", False)),
+        "icon": _s("icon"),
+        "color": _s("color"),
+        "description": _s("description"),
+        "enabled": bool(data.get("enabled", True)),
+        "source": "connector",
+    }
+
+
+def requires_connector_token(f):
+    """Bearer-Token-Gate fuer die Connector-API. Opt-in: ohne CONNECTOR_TOKEN
+    ist die API deaktiviert (404). Mit IP-Ratelimit gegen Token-Bruteforce."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not CONNECTOR_TOKEN:
+            abort(404)
+        ip = _client_ip()
+        remaining = _api_limiter.locked_for(ip)
+        if remaining:
+            return _json_error("rate_limited", 429, retry_after=remaining)
+        auth = request.headers.get("Authorization", "")
+        token = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+        if not token or not hmac.compare_digest(token, CONNECTOR_TOKEN):
+            newly = _api_limiter.record_failure(ip)
+            _log.warning("Connector-API: ungueltiges Token von %s%s", ip,
+                         " -> IP gesperrt" if newly else "")
+            return _json_error("unauthorized", 401)
+        _api_limiter.record_success(ip)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def _connector_actor(data: dict) -> str:
+    """Audit-Akteur: vom Connector gemeldete Kennung (oder Servicename), begrenzt."""
+    ident = str(data.get("connector") or data.get("name") or "unknown").strip()
+    return "connector:" + (ident[:64] or "unknown")
+
+
+@app.route("/api/v1/health")
+@requires_connector_token
+def api_health():
+    """Token-Check + Konnektivitaetstest fuer Connectoren."""
+    return {"status": "ok", "version": updater.CURRENT}
+
+
+@app.route("/api/v1/register", methods=["POST"])
+@requires_connector_token
+def api_register():
+    """Service an-/ummelden (idempotent per Pfad). Ueberschreibt NUR eigene
+    (source=connector) Eintraege, niemals manuell gepflegte."""
+    data = request.get_json(silent=True) or {}
+    svc = _service_from_json(data)
+
+    errors = validate_service(svc)          # K2: gleiche strikte Validierung wie im GUI
+    if not svc["backend"]:                  # fuer Connector-Routen ist das Backend Pflicht
+        errors.append("flash.field_invalid_backend")
+    if svc["path"] == "/":                  # "/" ist fuer das Dashboard selbst reserviert
+        errors.append("flash.field_invalid_path")
+    errors = list(dict.fromkeys(errors))    # deduplizieren, Reihenfolge erhalten
+    if errors:
+        return _json_error("validation_failed", 400, fields=errors)
+
+    actor = _connector_actor(data)
+    with _api_lock:
+        cfg = load_config()
+        idx = next((i for i, s in enumerate(cfg["services"])
+                    if _norm_path(str(s.get("path", ""))) == svc["path"]), None)
+        if idx is not None:
+            if cfg["services"][idx].get("source") != "connector":
+                updater.audit(actor, "CONNECTOR_REGISTER_CONFLICT", f"path={svc['path']}")
+                return _json_error("path_owned_by_manual", 409, path=svc["path"])
+            cfg["services"][idx] = svc
+            action = "CONNECTOR_SERVICE_UPDATED"
+        else:
+            cfg["services"].append(svc)
+            action = "CONNECTOR_SERVICE_REGISTERED"
+        save_config(cfg)
+
+    updater.audit(actor, action, f"path={svc['path']} backend={svc['backend']} scheme={svc['scheme']}")
+    _log.info("Connector: %s %s -> %s", action, svc["path"], svc["backend"])
+    if svc["scheme"] == "https" and not svc["ssl_verify"]:
+        _log.warning("Connector-Service %s: https OHNE Zertifikatspruefung", svc["path"])
+    keep = ("name", "path", "backend", "scheme", "ssl_verify", "enabled", "source")
+    return {"status": "ok", "action": action, "service": {k: svc[k] for k in keep}}
+
+
+@app.route("/api/v1/deregister", methods=["POST"])
+@requires_connector_token
+def api_deregister():
+    """Service abmelden. Entfernt NUR eigene (source=connector) Eintraege."""
+    data = request.get_json(silent=True) or {}
+    path = _norm_path(str(data.get("path", "")))
+    if not _RE_PATH.match(path) or path == "/" or ".." in path:
+        return _json_error("invalid_path", 400)
+
+    actor = _connector_actor(data)
+    with _api_lock:
+        cfg = load_config()
+        idx = next((i for i, s in enumerate(cfg["services"])
+                    if _norm_path(str(s.get("path", ""))) == path), None)
+        if idx is None:
+            return _json_error("not_found", 404, path=path)
+        if cfg["services"][idx].get("source") != "connector":
+            updater.audit(actor, "CONNECTOR_DEREGISTER_CONFLICT", f"path={path}")
+            return _json_error("path_owned_by_manual", 409, path=path)
+        cfg["services"].pop(idx)
+        save_config(cfg)
+
+    updater.audit(actor, "CONNECTOR_SERVICE_DEREGISTERED", f"path={path}")
+    _log.info("Connector: abgemeldet %s", path)
+    return {"status": "ok", "path": path}
+
+
+# ----------------------------------------------------------------------------
 # Benachrichtigungs-Monitor (Hintergrund-Thread): erkennt Ereignisse und meldet.
 # ----------------------------------------------------------------------------
 NOTIFY_STATE = CONFIG_DIR / ".notify_state.json"
@@ -1018,5 +1166,7 @@ if __name__ == "__main__":
     regenerate(load_config())
     check_admin_password()
     threading.Thread(target=_notify_monitor, name="notify-monitor", daemon=True).start()
+    if CONNECTOR_TOKEN:
+        _log.info("Platform-Connector-API aktiv (/api/v1/register, /deregister, /health)")
     _log.info("config-app gestartet, bereit auf :5000")
     serve(app, host="0.0.0.0", port=5000)
