@@ -102,7 +102,7 @@
           <td><span class="dot dot-{{ st.dot if st else 'unknown' }}"
                     id="st-{{ loop.index0 }}"
                     title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
-          <td>{{ s.name }}</td>
+          <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}</td>
           <td><code>{{ s.path }}</code></td>
           <td><code>{{ s.backend }}</code></td>
           <td>{{ s.scheme or 'http' }}</td>

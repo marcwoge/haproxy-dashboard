@@ -68,6 +68,10 @@ PLATFORM_ADMIN_PASSWORD = _secret("PLATFORM_ADMIN_PASSWORD", "")
 # Auto-Registrierung von Services durch Connector-Sidecars. Leer = API deaktiviert.
 # Getrennt vom Admin-Passwort; nur fuer Registrierung/Abmeldung, kein GUI-Zugriff.
 CONNECTOR_TOKEN = _secret("CONNECTOR_TOKEN", "")
+# Verwaiste Connector-Eintraege nach TTL Sekunden ohne Heartbeat entfernen (0 = aus).
+# MUSS groesser als der Connector-HEARTBEAT sein (dort Default 60s), sonst wuerden
+# lebende Eintraege zwischen zwei Heartbeats faelschlich entfernt.
+CONNECTOR_TTL = int(os.environ.get("CONNECTOR_TTL", "180"))
 
 # H1: bekannte triviale Passwoerter, die (falls gesetzt) laut angemahnt werden.
 WEAK_PASSWORDS = {
@@ -1023,6 +1027,7 @@ def api_register():
     (source=connector) Eintraege, niemals manuell gepflegte."""
     data = request.get_json(silent=True) or {}
     svc = _service_from_json(data)
+    svc["updated_at"] = int(time.time())    # server-seitiger Zeitstempel fuer das Reaping
 
     errors = validate_service(svc)          # K2: gleiche strikte Validierung wie im GUI
     if not svc["backend"]:                  # fuer Connector-Routen ist das Backend Pflicht
@@ -1161,6 +1166,42 @@ def _notify_monitor() -> None:
             _log.warning("Notify-Monitor: %s", e)
 
 
+# ----------------------------------------------------------------------------
+# Connector-Reaper (Hintergrund-Thread): entfernt verwaiste Connector-Eintraege,
+# deren Heartbeat laenger als CONNECTOR_TTL ausgeblieben ist (z. B. hart gekillter
+# Container, der sich nicht sauber abmelden konnte). Beruehrt NUR source=connector.
+# ----------------------------------------------------------------------------
+def _reap_once() -> list:
+    """Ein Reaping-Durchlauf: entfernt verwaiste Connector-Eintraege. Gibt die
+    entfernten Services zurueck (leer = nichts zu tun)."""
+    now = time.time()
+    with _api_lock:
+        cfg = load_config()
+        kept, reaped = [], []
+        for s in cfg["services"]:
+            stale = (s.get("source") == "connector"
+                     and now - float(s.get("updated_at", 0) or 0) > CONNECTOR_TTL)
+            (reaped if stale else kept).append(s)
+        if reaped:
+            cfg["services"] = kept
+            save_config(cfg)
+    for s in reaped:
+        updater.audit("reaper", "CONNECTOR_SERVICE_REAPED",
+                      f"path={s.get('path')} stale>{CONNECTOR_TTL}s")
+        _log.warning("Connector-Service verwaist entfernt: %s", s.get("path"))
+    return reaped
+
+
+def _connector_reaper() -> None:
+    interval = max(10, min(CONNECTOR_TTL, 60))
+    while True:
+        time.sleep(interval)
+        try:
+            _reap_once()
+        except Exception as e:  # noqa: BLE001
+            _log.warning("Connector-Reaper: %s", e)
+
+
 if __name__ == "__main__":
     # Beim Start einmal alles erzeugen, damit haproxy sofort eine Config hat.
     regenerate(load_config())
@@ -1168,5 +1209,7 @@ if __name__ == "__main__":
     threading.Thread(target=_notify_monitor, name="notify-monitor", daemon=True).start()
     if CONNECTOR_TOKEN:
         _log.info("Platform-Connector-API aktiv (/api/v1/register, /deregister, /health)")
+        if CONNECTOR_TTL > 0:
+            threading.Thread(target=_connector_reaper, name="connector-reaper", daemon=True).start()
     _log.info("config-app gestartet, bereit auf :5000")
     serve(app, host="0.0.0.0", port=5000)
