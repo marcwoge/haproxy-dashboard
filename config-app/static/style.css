@@ -72,6 +72,15 @@ body {
 .tile-name { font-size: 1.2rem; font-weight: 600; margin-top: auto; }
 .tile-desc { font-size: .85rem; opacity: .75; }
 .tile-path { font-size: .75rem; opacity: .5; font-family: monospace; margin-top: .4rem; }
+/* Platform-Connector: marks auto-registered services */
+.tile-src { position: absolute; bottom: 1rem; right: 1rem; font-size: .95rem; opacity: .6; cursor: default; }
+.src-badge {
+  display: inline-block; margin-left: .35rem; padding: 0 .4em;
+  border-radius: 6px; font-size: .82em; line-height: 1.5;
+  color: var(--accent, #38bdf8);
+  background: rgba(56,189,248,.14); border: 1px solid rgba(56,189,248,.35);
+  cursor: default;
+}
 
 .empty { grid-column: 1 / -1; text-align: center; opacity: .7; }
 .empty a { color: var(--accent, #38bdf8); }

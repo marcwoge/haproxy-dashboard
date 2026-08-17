@@ -65,6 +65,7 @@
   "svc.col_ssl": "SSL check",
   "svc.col_enabled": "Enabled",
   "svc.empty": "No services yet.",
+  "svc.via_connector": "via connector",
   "svc.stats_error": "Backend status currently unavailable ({error}).",
   "svc.delete_confirm": "Really delete service “{name}”?",
   "svc.add_title": "Add service",

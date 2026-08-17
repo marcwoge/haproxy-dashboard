@@ -16,6 +16,7 @@
     {% if show_status %}
     <span class="tile-status dot dot-{{ s.dot or 'unknown' }}" title="{{ t('dash.status') }}: {{ s.dot or t('dash.unknown') }}"></span>
     {% endif %}
+    {% if s.source == 'connector' %}<span class="tile-src" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}
     <div class="tile-icon">{{ s.icon or '▣' }}</div>
     <div class="tile-name">{{ s.name }}</div>
     {% if s.description %}<div class="tile-desc">{{ s.description }}</div>{% endif %}

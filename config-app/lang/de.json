@@ -65,6 +65,7 @@
   "svc.col_ssl": "SSL-Prüfung",
   "svc.col_enabled": "Aktiv",
   "svc.empty": "Noch keine Services.",
+  "svc.via_connector": "über Connector",
   "svc.stats_error": "Backend-Status z. Zt. nicht abrufbar ({error}).",
   "svc.delete_confirm": "Service „{name}“ wirklich löschen?",
   "svc.add_title": "Service hinzufügen",

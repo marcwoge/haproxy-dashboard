@@ -141,6 +141,46 @@ ergänzen (siehe oben). Danach als Backend `<container-name>:<port>` eintragen.
 - **an**: HAProxy schneidet `/abfallmanager` ab, das Backend sieht `/...`.
   Richtig für Apps, die unbedingt auf `/` erwarten.
 
+### Automatisch anbinden: Platform-Connector (Sidecar)
+
+Statt den Service manuell im Admin-GUI anzulegen, kannst du einen kleinen
+**Connector-Container** in die Compose deines anderen Projekts legen. Er meldet den
+Service beim Start selbst an (Kachel + Route) und beim Stop wieder ab – die Kachel
+erscheint und verschwindet also mit deinem Projekt.
+
+Voraussetzung: auf der Plattform in `.env` ein **`CONNECTOR_TOKEN`** setzen (leer =
+API deaktiviert). Empfohlen ist der **`proxy`-Modus** – dann bleibt deine App auf
+ihrem eigenen Netz und du musst an ihr **nichts** ändern:
+
+```yaml
+services:
+  billing-app:
+    image: deinprojekt/billing            # unverändert
+
+  platform-connector:
+    image: ghcr.io/your-org/haproxy-dashboard/connector:latest
+    container_name: billing-connector
+    environment:
+      PLATFORM_API:   https://platform.example.local
+      PLATFORM_TOKEN: ${CONNECTOR_TOKEN}
+      MODE:           proxy
+      SERVICE_NAME:   "Billing"
+      SERVICE_PATH:   /billing
+      SERVICE_TARGET: billing-app:8080     # deine App im Projekt-Netz
+      CONNECTOR_HOST: billing-connector    # = container_name
+      SERVICE_ICON:   "💳"
+      INSECURE:       "true"               # nur bei selbstsigniertem Plattform-Zertifikat
+    networks: [default, acme-platform]
+    restart: unless-stopped
+
+networks:
+  acme-platform: { external: true }
+```
+
+Alternativ der **`register`-Modus** (deine App tritt dem geteilten Netz bei, kein
+Extra-Hop). Alle Variablen, beide Modi und Details: siehe
+[`connector/README.md`](connector/README.md).
+
 ---
 
 ## 4. Erscheinungsbild
