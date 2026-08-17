@@ -3,7 +3,7 @@
 **Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.0.2-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.1.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 

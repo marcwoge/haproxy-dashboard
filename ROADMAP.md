@@ -29,32 +29,28 @@
 - [x] Rollback auf vorherige Version per Klick (Admin-Knopf, host-agent, gleicher sicherer Pfad)
 - [x] Health-/Update-Benachrichtigung per E-Mail/Webhook (SMTP-Relay ODER
       Direktversand via MX, + Webhook; Ereignisse einzeln schaltbar, im Admin)
-- [ ] **Platform-Connector** – Sidecar zum Self-Service-Einbinden fremder
-      Compose-Projekte (Cloudflare-Tunnel-Gefühl, aber ohne Tunnel, da gleicher Host):
-  - [ ] **Auto-Registrierung**: meldet den Service beim Start per API bei der
-        config-app an (Name/Pfad/Backend/Icon aus env) und **beim Stop wieder ab**
-        → Kachel erscheint/verschwindet mit dem Projekt.
-  - [ ] **Optionaler Gateway-/Proxy-Modus**: sitzt auf Plattform- und Projekt-Netz
-        und proxyt TCP zum App-Container, sodass die App dem geteilten Netz **nicht**
-        beitreten muss (mehr Isolation; Backend = `connector:port`).
-  - [ ] **Veröffentlichung** als Image auf GHCR/Docker Hub
-        (`image: …/connector:latest`), Konfiguration rein über env – Drop-in.
-  - [ ] Alternativen zuerst prüfen: bei wenigen Services genügt das dokumentierte
-        „externes Netz + GUI"-Verfahren; bei **anderem Host/NAT** kein Eigenbau,
-        sondern frp/inlets/WireGuard/cloudflared.
+- [x] **Platform-Connector** (v1.1.0) – Sidecar zum Self-Service-Einbinden fremder
+      Compose-Projekte (ohne Tunnel, da gleicher Host):
+  - [x] **Auto-Registrierung** (`/api/v1/register|deregister`, `source=connector`):
+        Kachel erscheint/verschwindet mit dem Projekt; Heartbeat + Reaping verwaister
+        Einträge (`CONNECTOR_TTL`).
+  - [x] **Gateway-/Proxy-Modus**: TCP-Ambassador, die App bleibt auf ihrem eigenen
+        Netz isoliert (Backend = `connector:port`); Alternativ `register`-Modus.
+  - [x] **Veröffentlichung** als signiertes GHCR-Image (`connector`, im Release-Workflow).
+  - [x] „via connector"-Kennzeichnung auf Dashboard + Admin.
 
-  **Sicherheit des Connectors** (zwingend – Auto-Registrierung ist eine Angriffsfläche):
-  - [ ] **Dediziertes Maschinen-Token** (nicht das Admin-Passwort), scoped nur auf
-        „Service registrieren/abmelden", pro Connector widerrufbar.
-  - [ ] **Strikte Validierung** der Registrierungsdaten mit derselben Logik wie im GUI
-        (K2: Pfad/Backend gegen Config-Injection); Ziel gegen eine Whitelist prüfen
-        (kein Biegen auf beliebige interne Hosts / SSRF).
-  - [ ] **Rate-Limit** + **Audit-Log-Eintrag** je Registrierung/Abmeldung (Actor = Token-ID).
-  - [ ] **Kein Docker-Socket** – der Sidecar deklariert sich selbst per HTTPS
-        (konsistent zum „kein Socket in netz-/app-Container"-Prinzip).
-  - [ ] Registrierungs-API **getrennt von der Menschen-Admin-Auth**: eigener Endpunkt
-        `POST /api/register` / `/deregister`, nur Token (kein CSRF/Session).
-  - [ ] **TLS-Verifikation** Connector→config-app (bei self-signed: CA-Bundle/Pinning).
+  **Sicherheit des Connectors** (Auto-Registrierung ist eine Angriffsfläche):
+  - [x] **Dediziertes Maschinen-Token** (`CONNECTOR_TOKEN`, getrennt vom Admin-Passwort,
+        opt-in; leer = API deaktiviert).
+  - [x] **Strikte Validierung** der Registrierungsdaten (K2: Pfad/Backend gegen
+        Config-Injection), `/` reserviert, Backend Pflicht.
+  - [x] **Rate-Limit** + **Audit-Log-Eintrag** je Registrierung/Abmeldung/Reaping.
+  - [x] **Kein Docker-Socket** – der Sidecar deklariert sich selbst per HTTPS.
+  - [x] Registrierungs-API **getrennt von der Menschen-Admin-Auth** (`/api/v1/*`,
+        nur Token, von CSRF ausgenommen).
+  - [x] **TLS-Verifikation** Connector→config-app (`CA_BUNDLE`/`INSECURE`).
+  - [ ] offen: Backend-**Whitelist** gegen SSRF (Ziel ist K2-validiert, aber nicht
+        auf erlaubte Hosts beschränkt – Token gilt als vertrauenswürdige Infrastruktur).
 
 ## Sicherheit & Härtung (aus Security-Audit)
 
