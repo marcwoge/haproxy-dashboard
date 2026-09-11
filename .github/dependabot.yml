@@ -42,11 +42,12 @@ updates:
       github-actions:
         patterns: ["*"]
 
-  # ---- Docker base images (config-app + haproxy) ----------------------------
+  # ---- Docker base images (config-app + haproxy + connector) ----------------
   - package-ecosystem: "docker"
     directories:
       - "/config-app"
       - "/haproxy"
+      - "/connector"
     schedule:
       interval: "weekly"
       day: "monday"

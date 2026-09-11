@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Version stamp (set by the release action with the release tag)
 ARG APP_VERSION=dev
