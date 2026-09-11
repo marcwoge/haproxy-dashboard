@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -33,7 +33,7 @@ jobs:
 
       - name: Build & push config-app
         id: config
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./config-app
           build-args: |
@@ -45,7 +45,7 @@ jobs:
 
       - name: Build & push haproxy
         id: haproxy
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./haproxy
           push: true
@@ -55,7 +55,7 @@ jobs:
 
       - name: Build & push connector
         id: connector
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./connector
           build-args: |
