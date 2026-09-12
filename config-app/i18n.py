@@ -5,10 +5,14 @@ Neue Sprache = neue Datei ablegen; sie erscheint automatisch in der Auswahl.
 Der Schluessel "_name" enthaelt den Anzeigenamen der Sprache.
 """
 import json
+import re
 from pathlib import Path
 
 LANG_DIR = Path(__file__).parent / "lang"
 FALLBACK = "en"
+# Sprachcodes sind Dateinamen -> strikt begrenzen (kein Slash/Punkt -> kein
+# Path-Traversal, egal welcher Aufrufer welchen Wert reinreicht).
+_SAFE_LANG = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
 _cache: dict = {}
 
 
@@ -19,6 +23,8 @@ def available() -> list:
 
 
 def _load(lang: str) -> dict:
+    if not _SAFE_LANG.match(lang or ""):
+        return {}                     # unbekannter/ungueltiger Code -> Fallback greift
     if lang not in _cache:
         try:
             _cache[lang] = json.loads((LANG_DIR / f"{lang}.json").read_text(encoding="utf-8"))

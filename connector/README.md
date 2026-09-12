@@ -91,6 +91,7 @@ networks:
 | `SERVICE_ENABLED` | | `true` | Register the service as enabled |
 | `MODE` | | `register` | `register` or `proxy` |
 | `LISTEN_PORT` | proxy | `8080` | Port the connector listens on (shared network) |
+| `LISTEN_ADDR` | | `0.0.0.0` | Proxy bind address; all interfaces by default (a specific container IP restricts it) |
 | `CONNECTOR_HOST` | | hostname | Name HAProxy uses to reach the connector in proxy mode; match `container_name` |
 | `CONNECTOR_ID` | | `SERVICE_NAME` | Identifier used as the audit actor |
 | `HEARTBEAT` | | `60` | Re-register interval in seconds (`0` = register once). Keep it below the platform's `CONNECTOR_TTL` so the route is not reaped |

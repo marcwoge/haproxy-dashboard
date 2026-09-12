@@ -6,8 +6,14 @@
   if (!grid) return;
 
   function apply(list) {
+    // Kachel-Lookup ueber die vorhandenen Kacheln aufbauen (kein aus Daten
+    // zusammengesetzter Selektor -> keine Escaping-/Injection-Probleme).
+    var byPath = {};
+    grid.querySelectorAll(".tile").forEach(function (t) {
+      byPath[t.getAttribute("data-path")] = t;
+    });
     (list || []).forEach(function (s) {
-      var tile = grid.querySelector('.tile[data-path="' + (s.path || "").replace(/"/g, '\\"') + '"]');
+      var tile = byPath[s.path];
       if (!tile) return;
       var dot = tile.querySelector(".tile-status");
       if (!dot) return;

@@ -65,6 +65,9 @@ CONNECTOR_ID = _env("CONNECTOR_ID") or _env("SERVICE_NAME") or "connector"
 
 TARGET = _env("SERVICE_TARGET")                   # proxy: forward here / register: backend
 LISTEN_PORT = int(_env("LISTEN_PORT", "8080") or "8080")   # proxy: listen port (shared net)
+# Bind address for the proxy. Default: all interfaces, so HAProxy can reach the
+# connector on the shared network. Set to a specific container IP to restrict.
+LISTEN_ADDR = _env("LISTEN_ADDR", "0.0.0.0")
 # Host HAProxy uses to reach the connector on the shared network (its own name).
 CONNECTOR_HOST = _env("CONNECTOR_HOST") or socket.gethostname()
 
@@ -176,7 +179,7 @@ def _start_proxy() -> None:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        sock.bind(("0.0.0.0", LISTEN_PORT))
+        sock.bind((LISTEN_ADDR, LISTEN_PORT))
     except OSError as e:
         log.error("proxy: cannot bind :%d - %s", LISTEN_PORT, e)
         sys.exit(2)

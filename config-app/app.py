@@ -267,6 +267,13 @@ def _csrf_protect():
             abort(400, "CSRF-Token ungültig oder fehlt.")
 
 
+@app.after_request
+def _security_headers(resp: Response) -> Response:
+    # Kein MIME-Sniffing -> JSON-/Textantworten werden nie als HTML interpretiert.
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return resp
+
+
 # ----------------------------------------------------------------------------
 # Konfiguration laden / speichern
 # ----------------------------------------------------------------------------
@@ -590,6 +597,16 @@ def validate_service(svc: dict) -> list:
     return errors
 
 
+def _config_path(name: str) -> Path:
+    """CONFIG_DIR/<name>, garantiert INNERHALB von CONFIG_DIR (kein Path-Traversal
+    ueber einen manipulierten Dateinamen). Bricht sonst mit 400 ab."""
+    base = CONFIG_DIR.resolve()
+    p = (base / name).resolve()
+    if p != base and base not in p.parents:
+        abort(400, "Ungültiger Pfad.")
+    return p
+
+
 def _logo_url(theme) -> str | None:
     """URL des hochgeladenen Logos inkl. Cache-Buster (mtime), sonst None."""
     fname = theme.get("logo")
@@ -648,7 +665,7 @@ def logo():
     fname = cfg["theme"].get("logo")
     if not fname:
         abort(404)
-    path = CONFIG_DIR / fname
+    path = _config_path(fname)
     if not path.exists():
         abort(404)
     resp = send_file(path)
@@ -711,7 +728,8 @@ def admin_state():
 @app.route("/admin/logs")
 @requires_auth
 def admin_logs():
-    which = request.args.get("which", "haproxy")
+    # Auf feste Werte normalisieren -> es wird nie Nutzereingabe zurueckgespiegelt.
+    which = "app" if request.args.get("which") == "app" else "haproxy"
     try:
         lines = int(request.args.get("lines", "200"))
     except ValueError:
@@ -925,8 +943,8 @@ def admin_theme():
     upload = request.files.get("logo_file")
     if request.form.get("remove_logo") == "on":
         old = theme.get("logo")
-        if old and (CONFIG_DIR / old).exists():
-            (CONFIG_DIR / old).unlink()
+        if old and _config_path(old).exists():
+            _config_path(old).unlink()
         theme["logo"] = ""
     elif upload and upload.filename:
         ext = os.path.splitext(upload.filename)[1].lower()
@@ -938,11 +956,11 @@ def admin_theme():
             flash(t("flash.svg_rejected"), "error")
         else:
             old = theme.get("logo")
-            if old and old != f"logo{ext}" and (CONFIG_DIR / old).exists():
-                (CONFIG_DIR / old).unlink()
+            if old and old != f"logo{ext}" and _config_path(old).exists():
+                _config_path(old).unlink()
             fname = f"logo{ext}"
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            (CONFIG_DIR / fname).write_bytes(data)
+            _config_path(fname).write_bytes(data)
             theme["logo"] = fname
 
     cfg["theme"] = theme
@@ -1086,7 +1104,7 @@ def api_deregister():
 
     updater.audit(actor, "CONNECTOR_SERVICE_DEREGISTERED", f"path={path}")
     _log.info("Connector: abgemeldet %s", path)
-    return {"status": "ok", "path": path}
+    return {"status": "ok"}
 
 
 # ----------------------------------------------------------------------------
