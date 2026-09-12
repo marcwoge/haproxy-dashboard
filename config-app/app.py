@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 from flask import (Flask, Response, abort, flash, redirect, render_template,
                    request, send_file, session, url_for)
+from werkzeug.utils import secure_filename
 from waitress import serve
 
 from haproxy_render import render as render_haproxy, _norm_path, _safe_id
@@ -597,14 +598,11 @@ def validate_service(svc: dict) -> list:
     return errors
 
 
-def _config_path(name: str) -> Path:
-    """CONFIG_DIR/<name>, garantiert INNERHALB von CONFIG_DIR (kein Path-Traversal
-    ueber einen manipulierten Dateinamen). Bricht sonst mit 400 ab."""
-    base = CONFIG_DIR.resolve()
-    p = (base / name).resolve()
-    if p != base and base not in p.parents:
-        abort(400, "Ungültiger Pfad.")
-    return p
+def _config_file(name: str) -> Path | None:
+    """CONFIG_DIR/<sicherer Dateiname>. `secure_filename` entfernt Pfad-Anteile
+    (kein Traversal). None, wenn der Name leer/ungueltig wird."""
+    safe = secure_filename(name or "")
+    return (CONFIG_DIR / safe) if safe else None
 
 
 def _logo_url(theme) -> str | None:
@@ -612,8 +610,8 @@ def _logo_url(theme) -> str | None:
     fname = theme.get("logo")
     if not fname:
         return None
-    p = CONFIG_DIR / fname
-    if not p.exists():
+    p = _config_file(fname)
+    if not p or not p.exists():
         return None
     return f"/logo?v={int(p.stat().st_mtime)}"
 
@@ -665,8 +663,8 @@ def logo():
     fname = cfg["theme"].get("logo")
     if not fname:
         abort(404)
-    path = _config_path(fname)
-    if not path.exists():
+    path = _config_file(fname)
+    if not path or not path.exists():
         abort(404)
     resp = send_file(path)
     # N1: hochgeladene Logos (v. a. SVG) abgesichert ausliefern - verhindert
@@ -943,8 +941,9 @@ def admin_theme():
     upload = request.files.get("logo_file")
     if request.form.get("remove_logo") == "on":
         old = theme.get("logo")
-        if old and _config_path(old).exists():
-            _config_path(old).unlink()
+        oldp = _config_file(old)
+        if oldp and oldp.exists():
+            oldp.unlink()
         theme["logo"] = ""
     elif upload and upload.filename:
         ext = os.path.splitext(upload.filename)[1].lower()
@@ -955,12 +954,13 @@ def admin_theme():
             _log.warning("SVG-Upload abgelehnt (aktive Inhalte)")
             flash(t("flash.svg_rejected"), "error")
         else:
+            fname = secure_filename(f"logo{ext}")
             old = theme.get("logo")
-            if old and old != f"logo{ext}" and _config_path(old).exists():
-                _config_path(old).unlink()
-            fname = f"logo{ext}"
+            oldp = _config_file(old)
+            if oldp and old != fname and oldp.exists():
+                oldp.unlink()
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            _config_path(fname).write_bytes(data)
+            (CONFIG_DIR / fname).write_bytes(data)
             theme["logo"] = fname
 
     cfg["theme"] = theme
