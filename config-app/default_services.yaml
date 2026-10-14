@@ -47,3 +47,11 @@ services:
     color: "#22c55e"                # optional tile color (empty = default)
     description: "Example application (adjust in the admin GUI)"
     enabled: true
+    # Optional per-service routing (see the admin GUI section "Advanced"):
+    # timeout_server: 600s            # long uploads/exports (default: global 60s)
+    # timeout_tunnel: 1h              # WebSocket / long-polling
+    # deny_paths: [/admin, /setup]    # sub-paths (relative to path) -> 403
+    # healthcheck:                    # HTTP health check instead of a plain TCP check
+    #   uri: /health                  #   default: the service path
+    #   expect_status: "200|301|302"  #   default: any 2xx/3xx
+    #   interval: 10s

@@ -81,6 +81,17 @@
   "svc.ssl_warn": "⚠ Nur abschalten, wenn das Backend ein selbstsigniertes Zertifikat nutzt – ohne Prüfung ist die Verbindung zum Backend gegen MITM angreifbar (nur bei https relevant).",
   "svc.f_strip": "Pfad-Präfix vor Weiterleitung entfernen",
   "svc.f_enabled": "Aktiv",
+  "svc.adv_heading": "Erweitert (optional)",
+  "svc.f_timeout_server": "Server-Timeout (z. B. 600s, 10m, 1h)",
+  "svc.f_timeout_tunnel": "Tunnel-Timeout (WebSocket/Long-Polling, z. B. 1h)",
+  "svc.f_deny_paths": "Gesperrte Unterpfade (einer pro Zeile)",
+  "svc.f_deny_hint": "Relativ zum Service-Pfad (z. B. /admin); Zugriffe liefern 403.",
+  "svc.hc_enabled": "HTTP-Health-Check verwenden",
+  "svc.hc_uri": "Health-Check-Pfad (Default: Service-Pfad)",
+  "svc.hc_expect": "Erwartete Status (z. B. 200|301|302)",
+  "svc.hc_interval": "Intervall (z. B. 10s)",
+  "svc.hc_hint": "Sendet GET mit Host = Domain und X-Forwarded-Proto: https.",
+  "svc.locked": "Gesperrte Unterpfade",
 
   "theme.heading": "Erscheinungsbild & Domain",
   "theme.domain": "Domain",
@@ -156,5 +167,8 @@
   "flash.field_invalid_backend": "Backend ungültig: nur host/container[:port] bzw. ip[:port] erlaubt.",
   "flash.field_invalid_scheme": "Schema muss http oder https sein.",
   "flash.field_invalid_color": "Farbe ungültig: Hex (z. B. #22c55e) oder einfacher Farbname.",
-  "flash.field_invalid_icon": "Icon/Beschreibung enthält unzulässige Steuerzeichen."
+  "flash.field_invalid_icon": "Icon/Beschreibung enthält unzulässige Steuerzeichen.",
+  "flash.field_invalid_timeout": "Timeout ungültig: nur Zeitangaben wie 600s, 10m, 1h (max. 24h).",
+  "flash.field_invalid_deny": "Gesperrter Pfad ungültig: erlaubt sind /, Buchstaben, Ziffern, . _ -.",
+  "flash.field_invalid_healthcheck": "Health-Check ungültig: Pfad, Status (z. B. 200|301) und Intervall prüfen."
 }

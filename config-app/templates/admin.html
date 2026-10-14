@@ -102,7 +102,7 @@
           <td><span class="dot dot-{{ st.dot if st else 'unknown' }}"
                     id="st-{{ loop.index0 }}"
                     title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
-          <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}</td>
+          <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}{% if s.deny_paths %} <span class="src-badge" title="{{ t('svc.locked') }}">🔒</span>{% endif %}</td>
           <td><code>{{ s.path }}</code></td>
           <td><code>{{ s.backend }}</code></td>
           <td>{{ s.scheme or 'http' }}</td>
@@ -171,6 +171,34 @@
         <input type="checkbox" name="enabled" {{ 'checked' if (e.enabled if edit_service else True) }}>
         {{ t('svc.f_enabled') }}
       </label>
+
+      <p class="upd-hint full" style="grid-column:1/-1; margin:.5rem 0 -.2rem; font-weight:600; opacity:.9;">{{ t('svc.adv_heading') }}</p>
+      <label>{{ t('svc.f_timeout_server') }}
+        <input name="timeout_server" value="{{ e.timeout_server or '' }}" placeholder="600s">
+      </label>
+      <label>{{ t('svc.f_timeout_tunnel') }}
+        <input name="timeout_tunnel" value="{{ e.timeout_tunnel or '' }}" placeholder="1h">
+      </label>
+      <label class="full">{{ t('svc.f_deny_paths') }}
+        <textarea name="deny_paths" rows="2" placeholder="/admin&#10;/setup">{{ (e.deny_paths or []) | join('\n') }}</textarea>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.f_deny_hint') }}</p>
+      {% set hc = e.healthcheck or {} %}
+      <label class="check full">
+        <input type="checkbox" name="hc_enabled" {{ 'checked' if hc }}>
+        {{ t('svc.hc_enabled') }}
+      </label>
+      <label>{{ t('svc.hc_uri') }}
+        <input name="hc_uri" value="{{ hc.uri or '' }}" placeholder="/health">
+      </label>
+      <label>{{ t('svc.hc_expect') }}
+        <input name="hc_expect" value="{{ hc.expect_status or '' }}" placeholder="200|301|302">
+      </label>
+      <label>{{ t('svc.hc_interval') }}
+        <input name="hc_interval" value="{{ hc.interval or '' }}" placeholder="10s">
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.hc_hint') }}</p>
+
       <div class="full form-actions">
         <button class="btn" type="submit">{{ t('common.save') }}</button>
         {% if edit_service %}<a class="btn btn-ghost" href="{{ url_for('admin') }}">{{ t('common.cancel') }}</a>{% endif %}

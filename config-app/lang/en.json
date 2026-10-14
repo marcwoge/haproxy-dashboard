@@ -81,6 +81,17 @@
   "svc.ssl_warn": "⚠ Only disable this if the backend uses a self-signed certificate – without verification the connection to the backend is vulnerable to MITM (only relevant for https).",
   "svc.f_strip": "Strip the path prefix before forwarding",
   "svc.f_enabled": "Enabled",
+  "svc.adv_heading": "Advanced (optional)",
+  "svc.f_timeout_server": "Server timeout (e.g. 600s, 10m, 1h)",
+  "svc.f_timeout_tunnel": "Tunnel timeout (WebSocket/long-polling, e.g. 1h)",
+  "svc.f_deny_paths": "Blocked sub-paths (one per line)",
+  "svc.f_deny_hint": "Relative to the service path (e.g. /admin); requests return 403.",
+  "svc.hc_enabled": "Use HTTP health check",
+  "svc.hc_uri": "Health-check path (default: service path)",
+  "svc.hc_expect": "Expected statuses (e.g. 200|301|302)",
+  "svc.hc_interval": "Interval (e.g. 10s)",
+  "svc.hc_hint": "Sends GET with Host = domain and X-Forwarded-Proto: https.",
+  "svc.locked": "Blocked sub-paths",
 
   "theme.heading": "Appearance & domain",
   "theme.domain": "Domain",
@@ -156,5 +167,8 @@
   "flash.field_invalid_backend": "Invalid backend: only host/container[:port] or ip[:port] allowed.",
   "flash.field_invalid_scheme": "Scheme must be http or https.",
   "flash.field_invalid_color": "Invalid color: hex (e.g. #22c55e) or a simple color name.",
-  "flash.field_invalid_icon": "Icon/description contains invalid control characters."
+  "flash.field_invalid_icon": "Icon/description contains invalid control characters.",
+  "flash.field_invalid_timeout": "Invalid timeout: only time values like 600s, 10m, 1h (max. 24h).",
+  "flash.field_invalid_deny": "Invalid blocked path: allowed are /, letters, digits, . _ -.",
+  "flash.field_invalid_healthcheck": "Invalid health check: check the path, status (e.g. 200|301) and interval."
 }
