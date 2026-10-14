@@ -27,7 +27,7 @@ from flask import (Flask, Response, abort, flash, redirect, render_template,
 from werkzeug.utils import secure_filename
 from waitress import serve
 
-from haproxy_render import render as render_haproxy, _norm_path, _safe_id
+from haproxy_render import render as render_haproxy, _norm_path, _safe_id, _valid_timeout
 import updater
 import notifier
 import i18n
@@ -544,8 +544,13 @@ def requires_platform_admin(f):
     return wrapper
 
 
+def _parse_list(raw: str) -> list:
+    """Komma-/zeilengetrennte Eingabe -> Liste normalisierter Pfade (leere verworfen)."""
+    return [_norm_path(x.strip()) for x in re.split(r"[,\r\n]+", raw or "") if x.strip()]
+
+
 def _service_from_form(form) -> dict:
-    return {
+    svc = {
         "name": form.get("name", "").strip(),
         "path": _norm_path(form.get("path", "")),
         "backend": form.get("backend", "").strip(),
@@ -556,7 +561,20 @@ def _service_from_form(form) -> dict:
         "color": form.get("color", "").strip(),
         "description": form.get("description", "").strip(),
         "enabled": form.get("enabled") == "on",
+        # #6 Timeouts pro Service (optional, leer = globaler Default)
+        "timeout_server": form.get("timeout_server", "").strip().lower(),
+        "timeout_tunnel": form.get("timeout_tunnel", "").strip().lower(),
+        # #7 gesperrte Unterpfade (relativ zum Service-Pfad)
+        "deny_paths": _parse_list(form.get("deny_paths", "")),
     }
+    # #10 optionaler HTTP-Health-Check
+    if form.get("hc_enabled") == "on":
+        svc["healthcheck"] = {
+            "uri": form.get("hc_uri", "").strip(),
+            "expect_status": form.get("hc_expect", "").strip(),
+            "interval": form.get("hc_interval", "").strip().lower(),
+        }
+    return svc
 
 
 # --- K2: strikte Validierung gegen HAProxy-Config-Injection ------------------
@@ -569,6 +587,8 @@ _RE_COLOR = re.compile(r"^(#[0-9A-Fa-f]{3,8}|[A-Za-z]{1,20})$")
 _RE_SCHEME = ("http", "https")
 # H3: Update-Ziel-Tag (Docker-Tag-Zeichensatz), z. B. "latest" oder "v1.2.3".
 _RE_TARGET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+# #10: erwartete Health-Check-Statusliste, z. B. "200|301|302".
+_RE_EXPECT = re.compile(r"^[0-9|]{1,40}$")
 
 
 def _has_ctrl(s: str) -> bool:
@@ -595,7 +615,27 @@ def validate_service(svc: dict) -> list:
         errors.append("flash.field_invalid_color")
     if _has_ctrl(svc.get("icon", "")) or _has_ctrl(svc.get("description", "")):
         errors.append("flash.field_invalid_icon")
-    return errors
+    # #6 Timeouts: nur HAProxy-Zeitangaben (<=24h)
+    for tk in ("timeout_server", "timeout_tunnel"):
+        v = svc.get(tk, "")
+        if v and not _valid_timeout(v):
+            errors.append("flash.field_invalid_timeout")
+    # #7 deny_paths: jeder Eintrag wie ein Pfad (K2)
+    for d in svc.get("deny_paths", []) or []:
+        if not _RE_PATH.match(d) or ".." in d or d == "/":
+            errors.append("flash.field_invalid_deny")
+            break
+    # #10 Health-Check: URI/Statusliste/Intervall validieren
+    hc = svc.get("healthcheck") or {}
+    if hc:
+        uri = hc.get("uri", "")
+        exp = hc.get("expect_status", "")
+        iv = hc.get("interval", "")
+        if (uri and (not _RE_PATH.match(uri) or ".." in uri)) \
+                or (exp and not _RE_EXPECT.match(exp)) \
+                or (iv and not _valid_timeout(iv)):
+            errors.append("flash.field_invalid_healthcheck")
+    return list(dict.fromkeys(errors))   # deduplizieren, Reihenfolge erhalten
 
 
 def _config_file(name: str) -> Path | None:

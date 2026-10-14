@@ -56,6 +56,38 @@ def _is_safe(path: str, backend: str) -> bool:
     return True
 
 
+# Zusaetzliche K2-Muster fuer die Pro-Service-Optionen (#6/#7/#10).
+_SAFE_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")          # Host-Header im Health-Check
+_RE_HATIME = re.compile(r"^\d{1,8}(ms|s|m|h)$")             # HAProxy-Zeitangabe
+_RE_EXPECT = re.compile(r"^[0-9|]{1,40}$")                  # Statusliste, z. B. 200|301|302
+_MAX_TIMEOUT_S = 86400                                      # Obergrenze 24h
+
+
+def _ht_seconds(t: str):
+    """HAProxy-Zeitangabe -> Sekunden (float), oder None bei ungueltig."""
+    m = _RE_HATIME.match((t or "").strip().lower())
+    if not m:
+        return None
+    unit = m.group(1)
+    num = int((t or "").strip().lower()[:-len(unit)])
+    return num * {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[unit]
+
+
+def _valid_timeout(t: str) -> bool:
+    s = _ht_seconds(t)
+    return s is not None and 0 < s <= _MAX_TIMEOUT_S
+
+
+def _deny_list(path: str, deny_paths) -> list:
+    """Absolute, geprüfte Pfad-Praefixe (Service-Pfad + Unterpfad) fuer deny_paths."""
+    out = []
+    for d in (deny_paths or []):
+        dd = _norm_path(str(d))
+        if dd != "/" and _SAFE_PATH.match(dd) and ".." not in dd:
+            out.append(f"{path}{dd}")
+    return out
+
+
 def _clean_comment(s: str) -> str:
     return "".join(c for c in (s or "") if ord(c) >= 0x20 and c != "\x7f")[:80]
 
@@ -69,16 +101,31 @@ def _norm_path(path: str) -> str:
     return path or "/"
 
 
-def _server_opts(backend_addr: str) -> str:
-    """init-addr / resolvers passend zur Adresse (Name vs. IP) + Health-Check."""
+def _server_opts(backend_addr: str, inter: str = "5s", extra: str = "") -> str:
+    """init-addr / resolvers passend zur Adresse (Name vs. IP) + Health-Check.
+    `inter` = Health-Check-Intervall, `extra` = zusaetzliche Server-Optionen."""
     host = backend_addr.split(":")[0]
+    base = f"check inter {inter}"
+    if extra:
+        base += " " + extra
     if _is_ip(host):
-        return "check inter 5s init-addr last,libc,none"
-    return "check inter 5s resolvers docker init-addr last,libc,none"
+        return base + " init-addr last,libc,none"
+    return base + " resolvers docker init-addr last,libc,none"
 
 
 def render(config: dict, stats_auth: str = "") -> str:
     all_services = config.get("services", [])
+    domain = str(config.get("domain", "")).strip()
+
+    # #6: timeout client im Frontend auf das Maximum der Service-Timeouts anheben,
+    # sonst greift der 60s-Client-Timeout vor einem hoeheren Server-/Tunnel-Timeout.
+    max_to = 60
+    for s in all_services:
+        if not s.get("enabled", True):
+            continue
+        for key in ("timeout_server", "timeout_tunnel"):
+            if _valid_timeout(s.get(key)):
+                max_to = max(max_to, int(_ht_seconds(s.get(key))))
 
     lines = []
     A = lines.append
@@ -137,6 +184,8 @@ def render(config: dict, stats_auth: str = "") -> str:
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
     # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
     A("    http-request set-header X-Client-IP %[src]")
+    if max_to > 60:
+        A(f"    timeout client {max_to}s")   # #6: an laengstes Service-Timeout anpassen
     if HSTS_ENABLED:
         # N2: HSTS nur bei echtem Zertifikat (opt-in via ENABLE_HSTS=true).
         A(f'    http-response set-header Strict-Transport-Security "max-age={HSTS_MAX_AGE}; includeSubDomains"')
@@ -158,9 +207,16 @@ def render(config: dict, stats_auth: str = "") -> str:
         A(f"    # {_clean_comment(s.get('name', sid))}")
         A(f"    acl is_{sid} path {path}")
         A(f"    acl is_{sid} path_beg {path}/")
-        A(f"    use_backend bk_{sid} if is_{sid}")
+        # #7: gesperrte Unterpfade -> 403. http-request wird von HAProxy ohnehin
+        # vor use_backend verarbeitet; alle use_backend kommen daher gesammelt
+        # ans Ende (sonst warnt HAProxy "http-request after use_backend").
+        denies = _deny_list(path, s.get("deny_paths"))
+        if denies:
+            A(f"    http-request deny deny_status 403 if is_{sid} {{ path_beg {' '.join(denies)} }}")
         backends.append((sid, s, path))
 
+    for sid, _s, _p in backends:
+        A(f"    use_backend bk_{sid} if is_{sid}")
     A("    default_backend bk_dashboard")
     A("")
     A("# Dashboard + Admin-GUI")
@@ -175,6 +231,36 @@ def render(config: dict, stats_auth: str = "") -> str:
         if s.get("strip_path"):
             # Prefix /xyz vor Weiterleitung entfernen -> Backend sieht / ...
             A(f"    http-request set-path %[path,regsub(^{path}/?,/)]")
+
+        # #6: optionale Timeouts pro Service (Default = globaler Wert).
+        if _valid_timeout(s.get("timeout_server")):
+            A(f"    timeout server {str(s['timeout_server']).strip().lower()}")
+        if _valid_timeout(s.get("timeout_tunnel")):
+            A(f"    timeout tunnel {str(s['timeout_tunnel']).strip().lower()}")
+
+        # #10: optionaler HTTP-Health-Check (sonst einfacher TCP-Check wie bisher).
+        hc = s.get("healthcheck") or {}
+        inter, extra = "5s", ""
+        if hc:
+            uri = _norm_path(str(hc.get("uri") or path))
+            if not _SAFE_PATH.match(uri) or ".." in uri:
+                uri = path
+            interval = str(hc.get("interval") or "").strip().lower()
+            if _valid_timeout(interval):
+                inter = interval
+            A("    option httpchk")
+            send = f"    http-check send meth GET uri {uri} ver HTTP/1.1"
+            if domain and _SAFE_HOST.match(domain):
+                send += f" hdr Host {domain}"
+            send += " hdr X-Forwarded-Proto https"
+            A(send)
+            expect = str(hc.get("expect_status") or "").strip()
+            if _RE_EXPECT.match(expect):
+                A(f"    http-check expect rstatus ^({expect})$")
+            else:
+                A("    http-check expect rstatus ^([23][0-9][0-9])$")   # Default: 2xx/3xx
+            extra = "fall 3 rise 2"
+
         srv = f"    server s_{sid} {backend_addr}"
         if scheme == "https":
             srv += " ssl"
@@ -182,7 +268,7 @@ def render(config: dict, stats_auth: str = "") -> str:
                 srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
             else:
                 srv += " verify none"
-        srv += " " + _server_opts(backend_addr)
+        srv += " " + _server_opts(backend_addr, inter=inter, extra=extra)
         A(srv)
         A("")
 
