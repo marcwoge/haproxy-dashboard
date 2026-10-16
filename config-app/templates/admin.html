@@ -274,6 +274,68 @@
 
   <p class="hint">{{ t('admin.autosave_hint') }}</p>
 
+  {# ----- Domains & Zertifikate (#8 / #9) ----- #}
+  <section class="card" id="domains">
+    <h2>{{ t('dc.heading') }}</h2>
+
+    <h3 style="margin:.2rem 0 .4rem;">{{ t('dc.aliases_heading') }}</h3>
+    <form method="post" action="{{ url_for('admin_domains') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="full">{{ t('dc.aliases_label') }}
+        <textarea name="domain_aliases" rows="3" placeholder="wiki.example.local /wiki keep">{% for a in cfg.domain_aliases %}{{ a.host }} {{ a.redirect_to }}{% if a.keep_path %} keep{% endif %}
+{% endfor %}</textarea>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.aliases_hint') }}</p>
+      <div class="full form-actions">
+        <button class="btn" type="submit">{{ t('dc.aliases_save') }}</button>
+      </div>
+    </form>
+
+    <h3 style="margin:1rem 0 .3rem;">{{ t('dc.certs_heading') }}</h3>
+    <p class="upd-hint">{{ t('dc.certs_intro') }}</p>
+    <table class="svc-table">
+      <thead><tr><th>{{ t('dc.cert_subject') }}</th><th>{{ t('dc.cert_issuer') }}</th><th>{{ t('dc.cert_sans') }}</th><th>{{ t('dc.cert_expiry') }}</th><th></th></tr></thead>
+      <tbody>
+      {% for c in cert_list %}
+        <tr>
+          <td>{{ c.subject or c.file }}</td>
+          <td>{{ c.issuer }}</td>
+          <td><code>{{ c.sans | join(', ') }}</code></td>
+          <td>
+            {% if c.days_left is not none %}
+              <span class="dot dot-{{ 'down' if c.days_left < 14 else 'up' }}"></span>
+              {% if c.days_left < 0 %}{{ t('dc.cert_expired') }}{% else %}{{ t('dc.cert_days', n=c.days_left) }}{% endif %}
+            {% else %}–{% endif %}
+          </td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('admin_cert_delete') }}"
+                  onsubmit="return confirm('{{ c.file }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="file" value="{{ c.file }}">
+              <button class="btn btn-sm btn-danger" type="submit">{{ t('common.delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">{{ t('dc.cert_none') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('admin_cert_upload') }}" class="form-grid"
+          enctype="multipart/form-data" style="margin-top:.6rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>{{ t('dc.cert_file') }}
+        <input name="cert_file" type="file" accept=".crt,.pem,.cer" required>
+      </label>
+      <label>{{ t('dc.cert_key') }}
+        <input name="key_file" type="file" accept=".key,.pem">
+      </label>
+      <div class="full form-actions">
+        <button class="btn" type="submit">{{ t('dc.cert_upload') }}</button>
+      </div>
+    </form>
+  </section>
+
   {# ----- Benachrichtigungen ----- #}
   <section class="card" id="notify">
     <h2>{{ t('notify.heading') }}</h2>
@@ -289,6 +351,7 @@
       <label class="check"><input type="checkbox" name="ev_update_available" {{ 'checked' if nf.events.update_available }}> {{ t('notify.ev_update_available') }}</label>
       <label class="check"><input type="checkbox" name="ev_update_result" {{ 'checked' if nf.events.update_result }}> {{ t('notify.ev_update_result') }}</label>
       <label class="check"><input type="checkbox" name="ev_backend_down" {{ 'checked' if nf.events.backend_down }}> {{ t('notify.ev_backend_down') }}</label>
+      <label class="check"><input type="checkbox" name="ev_cert_expiry" {{ 'checked' if nf.events.cert_expiry }}> {{ t('notify.ev_cert_expiry') }}</label>
 
       <label class="full"><b>{{ t('notify.email') }}</b></label>
       <label>{{ t('notify.mode') }}

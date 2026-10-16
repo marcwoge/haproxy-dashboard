@@ -31,6 +31,7 @@ from haproxy_render import render as render_haproxy, _norm_path, _safe_id, _vali
 import updater
 import notifier
 import i18n
+import certs
 
 DEFAULT_LANG = os.environ.get("PLATFORM_LANG", "de")
 
@@ -166,7 +167,8 @@ DEFAULT_NOTIFICATIONS = {
     "smtp_password": "",          # sensibel - im GUI nie zurueckgegeben
     "smtp_security": "starttls",  # starttls | ssl | none
     "webhook_url": "",
-    "events": {"update_available": True, "update_result": True, "backend_down": True},
+    "events": {"update_available": True, "update_result": True, "backend_down": True,
+               "cert_expiry": True},
 }
 NOTIFY_INTERVAL = int(os.environ.get("NOTIFY_INTERVAL", "60"))
 
@@ -298,6 +300,7 @@ def load_config() -> dict:
     cfg["notifications"] = notif
     lang = str(cfg.get("language") or DEFAULT_LANG)
     cfg["language"] = lang if lang in i18n.available() else DEFAULT_LANG
+    cfg.setdefault("domain_aliases", [])
     return cfg
 
 
@@ -318,7 +321,7 @@ def save_config(cfg: dict) -> None:
 
 def regenerate(cfg: dict) -> None:
     HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
-    text = render_haproxy(cfg, stats_auth=STATS_AUTH)
+    text = render_haproxy(cfg, stats_auth=STATS_AUTH, extra_certs=certs.cert_files())
     tmp = HAPROXY_CFG.with_suffix(".cfg.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
@@ -589,6 +592,29 @@ _RE_SCHEME = ("http", "https")
 _RE_TARGET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 # #10: erwartete Health-Check-Statusliste, z. B. "200|301|302".
 _RE_EXPECT = re.compile(r"^[0-9|]{1,40}$")
+# #8: Alias-Domain-Hostname (streng, kein Schema/Pfad/Port).
+_RE_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
+
+
+def _parse_aliases(raw: str) -> list:
+    """Textarea-Zeilen 'host /pfad [keep]' -> Liste von Alias-Dicts."""
+    out = []
+    for line in (raw or "").splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        rt = _norm_path(parts[1]) if len(parts) > 1 else "/"
+        keep = len(parts) > 2 and parts[2].lower() in ("keep", "keep_path", "true", "1")
+        out.append({"host": parts[0].strip().lower(), "redirect_to": rt, "keep_path": keep})
+    return out
+
+
+def _valid_aliases(aliases) -> bool:
+    for a in aliases:
+        rt = a.get("redirect_to", "")
+        if not _RE_HOST.match(a.get("host", "")) or not _RE_PATH.match(rt) or ".." in rt:
+            return False
+    return True
 
 
 def _has_ctrl(s: str) -> bool:
@@ -747,6 +773,7 @@ def admin():
         stats_error=stats_error,
         update=update_info,
         update_audit=updater.read_audit(40),
+        cert_list=certs.list_certs(),
     )
 
 
@@ -883,6 +910,7 @@ def admin_notify():
         "update_available": f.get("ev_update_available") == "on",
         "update_result": f.get("ev_update_result") == "on",
         "backend_down": f.get("ev_backend_down") == "on",
+        "cert_expiry": f.get("ev_cert_expiry") == "on",
     }
     save_config(cfg)
     flash(_t()("flash.notify_saved"), "ok")
@@ -1007,6 +1035,57 @@ def admin_theme():
     save_config(cfg)
     flash(t("flash.theme_saved"), "ok")
     return redirect(url_for("admin"))
+
+
+# ----------------------------------------------------------------------------
+# #8 Domain-Aliase (301) + #9 zusaetzliche Zertifikate (SNI)
+# ----------------------------------------------------------------------------
+@app.route("/admin/domains", methods=["POST"])
+@requires_auth
+def admin_domains():
+    t = _t()
+    cfg = load_config()
+    aliases = _parse_aliases(request.form.get("domain_aliases", ""))
+    if not _valid_aliases(aliases):
+        flash(t("flash.alias_invalid"), "error")
+        return redirect(url_for("admin") + "#domains")
+    cfg["domain_aliases"] = aliases
+    save_config(cfg)
+    _log.info("Domain-Aliase gespeichert (%d)", len(aliases))
+    flash(t("flash.domains_saved"), "ok")
+    return redirect(url_for("admin") + "#domains")
+
+
+@app.route("/admin/cert", methods=["POST"])
+@requires_auth
+def admin_cert_upload():
+    t = _t()
+    cert_f = request.files.get("cert_file")
+    key_f = request.files.get("key_file")
+    if not cert_f or not cert_f.filename:
+        flash(t("flash.cert_need_both"), "error")
+        return redirect(url_for("admin") + "#domains")
+    key_bytes = key_f.read() if key_f and key_f.filename else b""
+    ok, info = certs.save_cert(cert_f.filename, cert_f.read(), key_bytes)
+    if ok:
+        regenerate(load_config())          # cfg-Hash aendert sich -> Watcher reload
+        _log.info("Zertifikat hinzugefuegt: %s", info)
+        flash(t("flash.cert_saved", name=info), "ok")
+    else:
+        flash(t(info), "error")
+    return redirect(url_for("admin") + "#domains")
+
+
+@app.route("/admin/cert/delete", methods=["POST"])
+@requires_auth
+def admin_cert_delete():
+    t = _t()
+    name = request.form.get("file", "")
+    if certs.delete_cert(name):
+        regenerate(load_config())
+        _log.info("Zertifikat geloescht: %s", os.path.basename(name))
+        flash(t("flash.cert_deleted", name=os.path.basename(name)), "ok")
+    return redirect(url_for("admin") + "#domains")
 
 
 # ----------------------------------------------------------------------------
@@ -1220,6 +1299,20 @@ def _notify_monitor() -> None:
                           f"Der Service „{names.get(idx)}“ ist nicht erreichbar (DOWN).",
                           {"service": names.get(idx)})
                 down = now_down
+
+            # 4) Zertifikats-Ablauf (einmal je Schwelle: 30/14/7 Tage)
+            if n.get("events", {}).get("cert_expiry", True):
+                dl = certs.min_days_left()
+                if dl is None:
+                    state.pop("cert_warn", None)
+                else:
+                    hit = next((x for x in (7, 14, 30) if dl <= x), None)
+                    if hit is not None and state.get("cert_warn") != hit:
+                        _fire(n, "cert_expiry", f"TLS-Zertifikat läuft in {dl} Tagen ab",
+                              f"Das am frühesten ablaufende TLS-Zertifikat läuft in {dl} Tagen ab.",
+                              {"days_left": dl})
+                        state["cert_warn"] = hit
+                        _notify_state_save(state)
         except Exception as e:  # noqa: BLE001
             _log.warning("Notify-Monitor: %s", e)
 

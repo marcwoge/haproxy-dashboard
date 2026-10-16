@@ -74,6 +74,30 @@ Services & Design verwaltest du am einfachsten im **Admin-GUI**. Alternativ
 direkt in `data\config\services.yaml` (wird beim Speichern bzw. Start in eine
 `haproxy.cfg` übersetzt).
 
+### Domain-Aliase & mehrere Zertifikate (SNI)
+
+Im Admin-GUI unter **„Domains & Zertifikate"**:
+
+- **Domain-Aliase (301):** alte Domains per 301 auf einen Plattform-Pfad umleiten
+  (Pfad + Query bleiben erhalten), z. B. `wiki.example.local /wiki keep`. „keep“
+  verhindert ein doppeltes Präfix, wenn der Pfad schon mit dem Ziel beginnt.
+- **Zusätzliche Zertifikate (SNI):** neben dem primären Zertifikat (in `certs/`)
+  weitere hochladen (Zertifikat + Schlüssel oder ein kombiniertes PEM). HAProxy wählt
+  anhand SNI. Angezeigt werden Subject, Aussteller, SANs und Ablauf; **private
+  Schlüssel werden nie angezeigt oder ausgeliefert**. Vor jedem Reload validiert
+  HAProxy die Config (`haproxy -c`) – fehlerhafte Zertifikate werden abgelehnt, die
+  laufende Config bleibt aktiv.
+- **Ablaufwarnung:** der Benachrichtigungs-Monitor meldet 30/14/7 Tage vor Ablauf
+  (Ereignis „Zertifikat läuft ab“, per E-Mail/Webhook).
+
+**Interne CA:** Zertifikat + Zwischenkette als PEM ablegen (primär in `certs/` oder
+zusätzlich hochladen) und die Root-CA auf den Clients verteilen (z. B. per GPO).
+
+**ACME / Let's Encrypt (DNS-01, optional):** für intern-only Hosts die Zertifikate
+**extern** mit `acme.sh`/`lego` über die DNS-API deines Providers ausstellen und das
+`fullchain.pem` (inkl. Schlüssel) hochladen bzw. per Cron erneuern. Provider-Zugangs-
+daten gehören als Secret auf den Host, nicht in `services.yaml`.
+
 ---
 
 ## 3. Einen Container als Kachel hinzufügen

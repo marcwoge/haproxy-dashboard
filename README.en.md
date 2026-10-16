@@ -73,6 +73,30 @@ All central values live in **`.env`**:
 Services & design are easiest to manage in the **admin GUI**. Alternatively edit
 `data\config\services.yaml` directly (translated into a `haproxy.cfg` on save/start).
 
+### Domain aliases & multiple certificates (SNI)
+
+In the admin GUI under **"Domains & certificates"**:
+
+- **Domain aliases (301):** redirect old domains to a platform path with a 301 (path
+  + query preserved), e.g. `wiki.example.local /wiki keep`. "keep" avoids a double
+  prefix when the path already starts with the target.
+- **Additional certificates (SNI):** besides the primary certificate (in `certs/`),
+  upload more (certificate + key, or a combined PEM). HAProxy selects by SNI. Subject,
+  issuer, SANs and expiry are shown; **private keys are never shown or served**.
+  Before every reload HAProxy validates the config (`haproxy -c`) – a broken
+  certificate is rejected and the running config stays active.
+- **Expiry warning:** the notification monitor alerts 30/14/7 days before expiry
+  (event "Certificate expiring", via email/webhook).
+
+**Internal CA:** place the certificate + intermediate chain as a PEM (primary in
+`certs/` or uploaded additionally) and distribute the root CA to the clients (e.g. via
+GPO).
+
+**ACME / Let's Encrypt (DNS-01, optional):** for internal-only hosts, issue the
+certificates **externally** with `acme.sh`/`lego` via your provider's DNS API and
+upload/renew the resulting `fullchain.pem` (including the key) via cron. Provider
+credentials belong on the host as a secret, not in `services.yaml`.
+
 ---
 
 ## 3. Adding a container as a tile
