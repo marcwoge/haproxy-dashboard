@@ -6,6 +6,13 @@
 domain: platform.example.local
 language: de                  # UI language (de, en, ...) - see config-app/lang/
 
+# Optional alias domains that 301-redirect to a platform path (admin GUI
+# "Domains & certificates"; path + query are preserved). Additional TLS
+# certificates (SNI) are uploaded in the GUI and stored under data/config/certs/.
+# domain_aliases:
+#   - {host: wiki.example.local, redirect_to: /wiki, keep_path: true}
+#   - {host: forms.example.local, redirect_to: /forms}
+
 theme:
   title: "Acme Platform"
   subtitle: "Service Dashboard"

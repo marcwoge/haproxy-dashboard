@@ -5,6 +5,9 @@ import re
 
 # Pfad zum kombinierten PEM IM haproxy-Container (siehe entrypoint.sh)
 CERT_PEM = "/usr/local/etc/haproxy/platform.pem"
+# Verzeichnis zusaetzlicher Zertifikate (SNI) IM haproxy-Container (Bind-Mount von
+# data/config/certs). HAProxy waehlt anhand SNI; leer -> nicht referenziert.
+EXTRA_CERT_DIR = "/certs-extra"
 
 # Interner Stats-Port (nur im Docker-Netz erreichbar, NICHT auf dem Host)
 STATS_PORT = 8404
@@ -88,6 +91,30 @@ def _deny_list(path: str, deny_paths) -> list:
     return out
 
 
+def _alias_lines(aliases, domain: str) -> list:
+    """#8: 301-Redirects von Alias-Domains auf die Plattform-Domain (Pfad+Query
+    bleiben via %[url] erhalten). Wird in fe_http UND fe_https eingesetzt."""
+    out = []
+    if not (domain and _SAFE_HOST.match(domain)):
+        return out
+    for i, a in enumerate(aliases or []):
+        host = str(a.get("host", "")).strip().lower()
+        rt = _norm_path(str(a.get("redirect_to", "/")))
+        if not _SAFE_HOST.match(host) or not _SAFE_PATH.match(rt) or ".." in rt:
+            continue
+        acl = f"host_alias_{i}"
+        out.append(f"    acl {acl} hdr(host),field(1,:) -i {host}")
+        if rt == "/":
+            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl}")
+        elif a.get("keep_path"):
+            # Pfad enthaelt das Praefix bereits -> unveraendert; sonst voranstellen.
+            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl} {{ path_beg {rt} }}")
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+        else:
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+    return out
+
+
 def _clean_comment(s: str) -> str:
     return "".join(c for c in (s or "") if ord(c) >= 0x20 and c != "\x7f")[:80]
 
@@ -113,9 +140,11 @@ def _server_opts(backend_addr: str, inter: str = "5s", extra: str = "") -> str:
     return base + " resolvers docker init-addr last,libc,none"
 
 
-def render(config: dict, stats_auth: str = "") -> str:
+def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     all_services = config.get("services", [])
     domain = str(config.get("domain", "")).strip()
+    alias_lines = _alias_lines(config.get("domain_aliases"), domain)   # #8
+    extra_certs = sorted(extra_certs or [])                            # #9 (SNI)
 
     # #6: timeout client im Frontend auf das Maximum der Service-Timeouts anheben,
     # sonst greift der 60s-Client-Timeout vor einem hoeheren Server-/Tunnel-Timeout.
@@ -173,13 +202,21 @@ def render(config: dict, stats_auth: str = "") -> str:
         A("    stats realm HAProxy\\ Statistics")
         A(f"    stats auth {stats_auth}")
     A("")
-    A("# HTTP -> HTTPS Redirect")
+    A("# HTTP -> HTTPS Redirect (+ Alias-Domain-Redirects auf die Plattform)")
     A("frontend fe_http")
     A("    bind :80")
+    for ln in alias_lines:   # #8: Alias-Hosts direkt auf https://<platform> leiten
+        A(ln)
     A("    http-request redirect scheme https code 301 unless { ssl_fc }")
     A("")
     A("frontend fe_https")
-    A(f"    bind :443 ssl crt {CERT_PEM} alpn h2,http/1.1")
+    bind = f"    bind :443 ssl crt {CERT_PEM}"
+    if extra_certs:
+        # #9: zusaetzliche Zertifikate per SNI. Der Kommentar listet sie, damit sich
+        # der cfg-Hash bei Cert-Aenderungen aendert -> Watcher validiert + reload.
+        A("    # SNI-Zertifikate: " + ", ".join(extra_certs))
+        bind += f" crt {EXTRA_CERT_DIR}"
+    A(bind + " alpn h2,http/1.1")
     A("    http-request set-header X-Forwarded-Proto https")
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
     # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
@@ -189,6 +226,8 @@ def render(config: dict, stats_auth: str = "") -> str:
     if HSTS_ENABLED:
         # N2: HSTS nur bei echtem Zertifikat (opt-in via ENABLE_HSTS=true).
         A(f'    http-response set-header Strict-Transport-Security "max-age={HSTS_MAX_AGE}; includeSubDomains"')
+    for ln in alias_lines:   # #8: Alias-Hosts auch auf 443 auf die Plattform leiten
+        A(ln)
     A("")
 
     backends = []

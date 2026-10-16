@@ -81,6 +81,8 @@ services:
     volumes:
       # place your .crt + .key here (read-only)
       - ./certs:/certs:ro
+      # additional SNI certificates uploaded via the admin GUI (read-only)
+      - ./data/config/certs:/certs-extra:ro
       # shared generated config
       - ./data/haproxy:/etc/haproxy/dynamic
     # Lets you reach backends via a host-published port: enter the backend in the
