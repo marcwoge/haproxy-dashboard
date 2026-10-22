@@ -1,0 +1,25 @@
+name: Docker build
+
+# Baut alle drei Images bei PRs und Pushes auf main (ohne Push in die Registry),
+# damit Base-Image-/Dependency-Updates vor dem Release auffallen.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [config-app, haproxy, connector]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build ${{ matrix.image }}
+        run: docker build --pull -f ${{ matrix.image }}/Dockerfile ${{ matrix.image }}

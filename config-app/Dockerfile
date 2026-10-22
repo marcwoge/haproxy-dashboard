@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14.9-slim
 
 # Versionsstempel (wird von der GitHub Action mit dem Release-Tag gesetzt)
 ARG APP_VERSION=dev
