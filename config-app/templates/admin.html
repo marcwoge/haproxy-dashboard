@@ -103,12 +103,14 @@
                     id="st-{{ loop.index0 }}"
                     title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
           <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}{% if s.deny_paths %} <span class="src-badge" title="{{ t('svc.locked') }}">🔒</span>{% endif %}</td>
-          <td><code>{{ s.path }}</code>{% if s.hidden %} <span class="src-badge" title="{{ t('svc.f_hidden') }}">🙈</span>{% endif %}</td>
+          <td>{% if s.link_url %}<span class="src-badge" title="{{ t('svc.f_link') }}">↗</span>{% else %}<code>{{ s.path }}</code>{% endif %}{% if s.hidden %} <span class="src-badge" title="{{ t('svc.f_hidden') }}">🙈</span>{% endif %}</td>
           <td>
+            {% if s.link_url %}<code>{{ s.link_url }}</code>{% else %}
             <code>{{ s.backend or (s.servers[0] if s.servers else '') }}</code>
             {% if st and st.n_servers > 1 %}
               {% set up = st.servers | selectattr('dot', 'equalto', 'up') | list | length %}
               <span class="src-badge" title="{{ t('svc.servers_up', up=up, total=st.n_servers) }}">{{ up }}/{{ st.n_servers }}</span>
+            {% endif %}
             {% endif %}
           </td>
           <td>{{ s.scheme or 'http' }}</td>
@@ -144,11 +146,15 @@
         <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
       </label>
       <label>{{ t('svc.f_path') }}
-        <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
+        <input name="path" value="{{ e.path or '' }}" placeholder="/abfallmanager">
       </label>
       <label>{{ t('svc.f_backend') }}
         <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
       </label>
+      <label class="full">{{ t('svc.f_link') }}
+        <input name="link_url" value="{{ e.link_url or '' }}" placeholder="https://portal.example.com/login">
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.f_link_hint') }}</p>
       <label>{{ t('svc.f_scheme') }}
         <select name="scheme">
           <option value="http" {{ 'selected' if (e.scheme or 'http')=='http' }}>http</option>

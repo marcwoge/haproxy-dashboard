@@ -69,6 +69,10 @@ services:
     # extra_paths: [/api, /static]    # additional paths, no separate dashboard tile
     # E5 - keep the route but hide the dashboard tile:
     # hidden: false
+    # #19 - external LINK tile instead of a proxy route (opens in a new tab).
+    # If set, path/backend/servers/timeouts are ignored and no route is created.
+    # link_url: "https://portal.example.com/login"
+    #   (optional healthcheck below then probes that URL for the UP/DOWN dot)
     # healthcheck:                    # HTTP health check instead of a plain TCP check
     #   uri: /health                  #   default: the service path
     #   expect_status: "200|301|302"  #   default: any 2xx/3xx

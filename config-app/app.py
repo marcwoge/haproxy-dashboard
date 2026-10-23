@@ -29,7 +29,7 @@ from waitress import serve
 
 from haproxy_render import (render as render_haproxy, _norm_path, _safe_id,
                             _valid_timeout, _service_servers, _valid_port,
-                            _tcp_streams, HC_SECRET_DIR)
+                            _tcp_streams, HC_SECRET_DIR, _link_parse)
 import updater
 import notifier
 import i18n
@@ -467,8 +467,18 @@ def _service_states(cfg: dict):
     for idx, s in enumerate(cfg["services"]):
         name = f"bk_{_safe_id(s.get('name', 'svc'), idx)}"
         st = bk.get(name)
+        is_link = bool(_link_parse(s.get("link_url")))
         if not s.get("enabled", True):
             status = "disabled"
+        elif is_link:
+            # #19: Link-Kachel. Mit Health-Check gibt es ein Pruef-Backend in den
+            # Stats; ohne bleibt der Punkt grau ("none", keine Benachrichtigung).
+            if not s.get("healthcheck"):
+                status = "none"
+            elif stats_error is not None or st is None:
+                status = "unknown"
+            else:
+                status = st.get("status", "")
         elif not _service_servers(s) or _norm_path(s.get("path", "/")) == "/":
             status = "none"
         elif stats_error is not None or st is None:
@@ -636,6 +646,8 @@ def _service_from_form(form) -> dict:
         "match": (form.get("match", "exact").strip().lower() or "exact"),
         "extra_paths": _parse_list(form.get("extra_paths", "")),
         "hidden": form.get("hidden") == "on",
+        # #19 externe Link-Kachel (verlinkt statt zu proxen); leer = normale Route
+        "link_url": form.get("link_url", "").strip(),
     }
     # E1 mehrere Server + Lastverteilung (optional; sonst das einzelne backend-Feld)
     servers = _parse_servers(form.get("servers", ""))
@@ -747,7 +759,15 @@ def validate_service(svc: dict) -> list:
     if not name or _has_ctrl(name):
         errors.append("flash.field_invalid_name")
     path = svc.get("path", "")
-    if not _RE_PATH.match(path) or ".." in path:
+    link = svc.get("link_url", "")
+    if link:
+        # #19: externe Link-Kachel. URL strikt pruefen; Pfad ist optional
+        # (Link-Kacheln erzeugen keine Route), nur bei echtem Pfad validieren.
+        if not _link_parse(link):
+            errors.append("flash.field_invalid_link")
+        if path and path != "/" and (not _RE_PATH.match(path) or ".." in path):
+            errors.append("flash.field_invalid_path")
+    elif not _RE_PATH.match(path) or ".." in path:
         errors.append("flash.field_invalid_path")
     backend = svc.get("backend", "")
     if backend and not _RE_BACKEND.match(backend):
@@ -857,8 +877,15 @@ def _dashboard_services(cfg: dict):
         if not s.get("enabled", True) or s.get("hidden"):   # E5: Route aktiv, keine Kachel
             continue
         item = dict(s)
+        item["index"] = idx
         st = status_by_index.get(idx)
         item["dot"] = st["dot"] if st else None
+        # #19: externe Link-Kachel -> verlinkt (neuer Tab), zeigt den Host statt des Pfads.
+        parsed = _link_parse(s.get("link_url"))
+        if parsed:
+            item["is_link"] = True
+            item["href"] = s["link_url"].strip()
+            item["link_host"] = parsed[1]
         services.append(item)
     return services, show_status
 
@@ -879,7 +906,8 @@ def public_status():
     if not cfg["theme"].get("show_status", True):
         abort(404)
     services, _ = _dashboard_services(cfg)
-    return {"services": [{"path": s.get("path"), "dot": s.get("dot") or "unknown"}
+    # Nach Index geschluesselt (eindeutig; Link-Kacheln haben keinen Routen-Pfad).
+    return {"services": [{"idx": s.get("index"), "dot": s.get("dot") or "unknown"}
                          for s in services]}
 
 

@@ -200,6 +200,26 @@ def _tcp_streams(config) -> list:
     return out
 
 
+# #19: externe Link-Kachel. Strikt: nur http/https, Host, optional Port/Pfad;
+# keine Leerzeichen/Quotes/spitzen Klammern (kein javascript:, keine Injection).
+_RE_LINK = re.compile(r"^https?://[A-Za-z0-9.-]{1,253}(?::\d{1,5})?(?:/[^\s\"'<>\\]*)?$")
+
+
+def _link_parse(url):
+    """#19: (scheme, host, port, path) einer externen Link-URL, sonst None."""
+    url = str(url or "").strip()
+    m = re.match(r"^(https?)://([A-Za-z0-9.-]{1,253})(?::(\d{1,5}))?(/[^\s\"'<>\\]*)?$", url)
+    if not m:
+        return None
+    scheme, host, port, path = m.group(1), m.group(2), m.group(3), m.group(4) or "/"
+    if not _SAFE_HOST.match(host):
+        return None
+    p = int(port) if port else (443 if scheme == "https" else 80)
+    if not (1 <= p <= 65535):
+        return None
+    return scheme, host, p, path
+
+
 _RE_HDRNAME = re.compile(r"^[A-Za-z0-9-]{1,40}$")
 
 
@@ -354,6 +374,8 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     for idx, s in enumerate(all_services):
         if not s.get("enabled", True):
             continue
+        if _link_parse(s.get("link_url")):
+            continue   # #19: externe Link-Kachel -> keine Route (ACL/use_backend)
         servers = _service_servers(s)      # E1: ein oder mehrere Backends
         if not servers:
             continue
@@ -448,6 +470,46 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
                     srv += " verify none"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)
             A(srv)
+        A("")
+
+    # #19: externe Link-Kacheln mit Health-Check -> reines Pruef-Backend (von
+    # keiner Route genutzt). So liefern Status-Punkt, Admin-Status und die
+    # "Backend DOWN"-Benachrichtigung ueber den vorhandenen Stats-Weg Ergebnisse.
+    for idx, s in enumerate(all_services):
+        if not s.get("enabled", True):
+            continue
+        link = _link_parse(s.get("link_url"))
+        hc = s.get("healthcheck") or {}
+        if not link or not hc:
+            continue
+        scheme, host, port, lpath = link
+        sid = _safe_id(s.get("name", "svc"), idx)
+        A(f"# Externer Link (nur Health-Check): {_clean_comment(s.get('name', sid))}")
+        A(f"backend bk_{sid}")
+        uri = _norm_path(str(hc.get("uri") or lpath))
+        if not _SAFE_PATH.match(uri) or ".." in uri:
+            uri = "/"
+        interval = str(hc.get("interval") or "").strip().lower()
+        inter = interval if _valid_timeout(interval) else "30s"
+        A("    option httpchk")
+        send = f"    http-check send meth GET uri {uri} ver HTTP/1.1 hdr Host {host}"
+        send += _hc_header(hc)   # E4: optionaler Header-Wert aus Secret-Datei
+        A(send)
+        expect = str(hc.get("expect_status") or "").strip()
+        if _RE_EXPECT.match(expect):
+            A(f"    http-check expect rstatus ^({expect})$")
+        else:
+            A("    http-check expect rstatus ^([23][0-9][0-9])$")
+        srv = f"    server s_{sid}_0 {host}:{port}"
+        if scheme == "https":
+            srv += " ssl"
+            if s.get("ssl_verify"):
+                srv += (" verify required ca-file /etc/ssl/certs/ca-certificates.crt"
+                        f" sni str({host}) check-sni {host}")
+            else:
+                srv += f" verify none sni str({host}) check-sni {host}"
+        # Externer Host -> per libc aufloesen (nicht ueber den Docker-Resolver).
+        A(srv + f" check inter {inter} init-addr last,libc,none")
         A("")
 
     # E3: TCP-Streams - eigene Ports, mode tcp, optional TLS-Terminierung mit dem
