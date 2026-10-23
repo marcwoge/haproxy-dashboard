@@ -355,6 +355,10 @@ Use “Send test message” to verify the configuration immediately.
   `status.txt`; the watcher in the haproxy container validates the config, reloads on
   change (`SIGUSR2`, master-worker) and writes the validation result to `status.txt`,
   which the GUI reads. An **invalid** config is discarded – the running proxy stays up.
+- **Internal CA (optional, `--profile ca`):** for multi-host setups the platform can
+  run its own certificate authority (step-ca) that issues short-lived certificates to
+  the backends — so the **HAProxy → backend** leg is TLS-encrypted and verified too.
+  Details: [`ca/README.md`](ca/README.md).
 
 ---
 

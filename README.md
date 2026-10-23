@@ -362,6 +362,10 @@ Mit „Testnachricht senden" lässt sich die Konfiguration sofort prüfen.
   Config, lädt bei Änderung neu (`SIGUSR2`, Master-Worker) und schreibt das
   Validierungsergebnis in `status.txt`, das das GUI ausliest. Eine **ungültige**
   Config wird verworfen – der laufende Proxy bleibt aktiv.
+- **Interne CA (optional, `--profile ca`):** für Setups über mehrere Hosts kann die
+  Plattform eine eigene Zertifizierungsstelle (step-ca) betreiben, die den Backends
+  kurzlebige Zertifikate ausstellt – so ist auch die Strecke **HAProxy → Backend**
+  TLS-verschlüsselt und verifiziert. Details: [`ca/README.md`](ca/README.md).
 
 ---
 
