@@ -19,6 +19,12 @@ EXTRA_CERT_DIR = "/certs-extra"
 # Interner Stats-Port (nur im Docker-Netz erreichbar, NICHT auf dem Host)
 STATS_PORT = 8404
 
+# E3: TCP-Streams. Diese Ports sind durch HAProxy-Frontends belegt und tabu.
+TCP_RESERVED_PORTS = {80, 443, STATS_PORT}
+# TCP-Verbindungen sind oft langlebig (DB, SSH, ...) -> grosszuegiger Default,
+# falls pro Stream kein Timeout gesetzt ist.
+TCP_DEFAULT_TIMEOUT = "1h"
+
 # N2: HSTS ist OPT-IN (Env), weil es mit dem selbstsignierten Fallback-Zertifikat
 # den Zugriff dauerhaft sperren wuerde. Nur mit echtem Zertifikat aktivieren.
 HSTS_ENABLED = os.environ.get("ENABLE_HSTS", "false").lower() == "true"
@@ -162,6 +168,31 @@ def _service_servers(s) -> list:
     else:
         addrs = [str(s.get("backend", "")).strip()]
     return [a for a in addrs if a and _SAFE_BACKEND.match(a)]
+
+
+def _valid_port(p) -> int:
+    """E3: gueltiger, nicht reservierter TCP-Port (1-65535); 0 = ungueltig."""
+    try:
+        n = int(str(p).strip())
+    except (TypeError, ValueError):
+        return 0
+    return n if (1 <= n <= 65535 and n not in TCP_RESERVED_PORTS) else 0
+
+
+def _tcp_streams(config) -> list:
+    """E3: validierte TCP-Streams als (sid, stream, port, servers). Streams ohne
+    gueltige Server sowie doppelte/reservierte Ports werden verworfen."""
+    out, used = [], set()
+    for idx, st in enumerate(config.get("tcp_streams", []) or []):
+        if not st.get("enabled", True):
+            continue
+        port = _valid_port(st.get("port"))
+        servers = _service_servers(st)   # gleiche Logik wie bei HTTP-Diensten
+        if not port or port in used or not servers:
+            continue
+        used.add(port)
+        out.append((f"tcp_{_safe_id(st.get('name', 'stream'), idx)}", st, port, servers))
+    return out
 
 
 _RE_HDRNAME = re.compile(r"^[A-Za-z0-9-]{1,40}$")
@@ -380,6 +411,37 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
                     srv += " verify none"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)
             A(srv)
+        A("")
+
+    # E3: TCP-Streams - eigene Ports, mode tcp, optional TLS-Terminierung mit dem
+    # Plattform-Zertifikat. Die Host-Ports muessen in docker-compose.yml published
+    # werden (siehe Admin-GUI-Hinweis), HAProxy bindet sie nur containerintern.
+    for sid, st, port, servers in _tcp_streams(config):
+        A(f"# TCP-Stream: {_clean_comment(st.get('name', sid))}")
+        A(f"frontend fe_{sid}")
+        A("    mode tcp")
+        A("    option tcplog")
+        bind = f"    bind :{port}"
+        if st.get("tls"):
+            bind += f" ssl crt {CERT_PEM}"     # TLS-Terminierung (Plattform-Zertifikat)
+        A(bind)
+        if st.get("clitcpka"):
+            A("    option clitcpka")            # Client-TCP-Keepalive
+        tc = str(st.get("timeout_client") or "").strip().lower()
+        A(f"    timeout client {tc if _valid_timeout(tc) else TCP_DEFAULT_TIMEOUT}")
+        A(f"    default_backend bk_{sid}")
+        A("")
+        A(f"backend bk_{sid}")
+        A("    mode tcp")
+        if len(servers) > 1:   # Lastverteilung nur ab 2 Servern (Default leastconn).
+            balance = (st.get("balance") or "").lower()
+            if balance not in _BALANCE:
+                balance = "leastconn"
+            A(f"    balance {balance}")
+        ts = str(st.get("timeout_server") or "").strip().lower()
+        A(f"    timeout server {ts if _valid_timeout(ts) else TCP_DEFAULT_TIMEOUT}")
+        for n, addr in enumerate(servers):
+            A(f"    server s_{sid}_{n} {addr} " + _server_opts(addr))
         A("")
 
     return "\n".join(lines) + "\n"

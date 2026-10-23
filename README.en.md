@@ -188,6 +188,24 @@ In the service form under **"Advanced (optional)"** (or directly in `services.ya
 log's retention is tunable via `LOG_ROTATE_AT`/`LOG_KEEP_LINES`. All three live in
 `.env` – see [section 5](#5-status-health--logs-admin-gui).
 
+### TCP streams (non-HTTP services)
+
+For services that don't speak HTTP (database, SSH, SMTP, …) the admin GUI has a
+**"TCP streams"** card. A stream listens on its **own port** and forwards plain TCP
+(`mode tcp`) to one or more targets:
+
+- **Dedicated listen port** (1–65535, not 80/443/8404) — unique per stream.
+- **Multiple targets + load balancing** — one `host:port` or several (one per line);
+  from two targets on, traffic is balanced (`leastconn` default, or `roundrobin`).
+- **Optional TLS termination** with the **platform certificate** — HAProxy decrypts,
+  the backend receives plain TCP.
+- **Timeouts** (client/server, default `1h`) and **`clitcpka`** (TCP keepalive to the client).
+
+> **Important:** each stream port must also be **published** for the `haproxy` service
+> in `docker-compose.yml` (`- "5432:5432"`), followed by `docker compose up -d`.
+> Otherwise HAProxy only binds the port inside the container — the admin GUI shows the
+> exact lines to add.
+
 ### Onboard automatically: the Platform Connector (sidecar)
 
 Instead of adding the service manually in the admin GUI, you can drop a small

@@ -373,6 +373,92 @@
     </form>
   </section>
 
+  {# ----- E3: TCP-Streams ----- #}
+  <section class="card" id="tcp">
+    <h2>{{ t('tcp.heading') }}</h2>
+    <p class="upd-hint">{{ t('tcp.intro') }}</p>
+
+    <table class="svc-table">
+      <thead><tr><th></th><th>{{ t('tcp.col_name') }}</th><th>{{ t('tcp.col_port') }}</th><th>{{ t('tcp.col_target') }}</th><th>{{ t('tcp.col_tls') }}</th><th>{{ t('svc.col_enabled') }}</th><th></th></tr></thead>
+      <tbody>
+      {% for s in tcp_streams %}
+        {% set ss = stream_status.get(loop.index0) %}
+        <tr>
+          <td><span class="dot dot-{{ ss.dot if ss else 'unknown' }}" title="{{ ss.status if ss else '' }}"></span></td>
+          <td>{{ s.name }}</td>
+          <td><code>:{{ s.port }}</code>{% if s.tls %} <span class="src-badge" title="{{ t('tcp.f_tls') }}">🔒</span>{% endif %}</td>
+          <td><code>{{ s.backend or (s.servers[0] if s.servers else '') }}</code>{% if s.servers and s.servers | length > 1 %} <span class="src-badge">+{{ s.servers | length - 1 }}</span>{% endif %}</td>
+          <td>{{ t('common.yes') if s.tls else t('common.no') }}</td>
+          <td>{{ '✓' if s.enabled else '–' }}</td>
+          <td class="actions">
+            <a class="btn btn-sm" href="{{ url_for('admin', edit_tcp=loop.index0) }}#tcp">{{ t('common.edit') }}</a>
+            <form method="post" action="{{ url_for('admin_tcp_delete') }}"
+                  onsubmit="return confirm('{{ t('svc.delete_confirm', name=s.name) }}');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="index" value="{{ loop.index0 }}">
+              <button class="btn btn-sm btn-danger" type="submit">{{ t('common.delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="muted">{{ t('tcp.none') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    {% if tcp_ports %}
+    <p class="upd-hint" style="margin-top:.6rem;">{{ t('tcp.compose_hint') }}</p>
+    <pre class="cmdbox">  haproxy:
+    ports:{% for p in tcp_ports %}
+      - "{{ p }}:{{ p }}"{% endfor %}</pre>
+    {% endif %}
+
+    {% set es = edit_stream or {} %}
+    <h3 style="margin:1rem 0 .3rem;">{{ t('tcp.edit_title') if edit_stream else t('tcp.add_title') }}</h3>
+    <form method="post" action="{{ url_for('admin_tcp') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if edit_tcp_idx is not none %}<input type="hidden" name="index" value="{{ edit_tcp_idx }}">{% endif %}
+      <label>{{ t('tcp.f_name') }}
+        <input name="name" value="{{ es.name or '' }}" placeholder="Postgres" required>
+      </label>
+      <label>{{ t('tcp.f_port') }}
+        <input name="port" type="number" min="1" max="65535" value="{{ es.port or '' }}" placeholder="5432" required>
+      </label>
+      <label class="full">{{ t('tcp.f_servers') }}
+        <textarea name="servers" rows="2" placeholder="db1:5432&#10;db2:5432">{% if es.servers %}{{ es.servers | join('\n') }}{% elif es.backend %}{{ es.backend }}{% endif %}</textarea>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('tcp.f_servers_hint') }}</p>
+      <label>{{ t('svc.f_balance') }}
+        <select name="balance">
+          <option value="leastconn" {{ 'selected' if (es.balance or 'leastconn') == 'leastconn' }}>{{ t('svc.balance_lc') }}</option>
+          <option value="roundrobin" {{ 'selected' if es.balance == 'roundrobin' }}>{{ t('svc.balance_rr') }}</option>
+        </select>
+      </label>
+      <label>{{ t('tcp.f_timeout_client') }}
+        <input name="timeout_client" value="{{ es.timeout_client or '' }}" placeholder="1h">
+      </label>
+      <label>{{ t('tcp.f_timeout_server') }}
+        <input name="timeout_server" value="{{ es.timeout_server or '' }}" placeholder="1h">
+      </label>
+      <label class="check">
+        <input type="checkbox" name="tls" {{ 'checked' if es.tls }}>
+        {{ t('tcp.f_tls') }}
+      </label>
+      <label class="check">
+        <input type="checkbox" name="clitcpka" {{ 'checked' if es.clitcpka }}>
+        {{ t('tcp.f_clitcpka') }}
+      </label>
+      <label class="check">
+        <input type="checkbox" name="enabled" {{ 'checked' if (es.enabled if edit_stream else True) }}>
+        {{ t('svc.f_enabled') }}
+      </label>
+      <div class="full form-actions">
+        <button class="btn" type="submit">{{ t('common.save') }}</button>
+        {% if edit_stream %}<a class="btn btn-ghost" href="{{ url_for('admin') }}#tcp">{{ t('common.cancel') }}</a>{% endif %}
+      </div>
+    </form>
+  </section>
+
   {# ----- Benachrichtigungen ----- #}
   <section class="card" id="notify">
     <h2>{{ t('notify.heading') }}</h2>

@@ -86,6 +86,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # E3: TCP streams. Each stream configured in the admin GUI needs its listen
+      # port published here (e.g. - "5432:5432"), then `docker compose up -d`.
+      # The admin GUI shows the exact lines to add.
     volumes:
       # place your .crt + .key here (read-only)
       - ./certs:/certs:ro

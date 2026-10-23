@@ -76,3 +76,18 @@ services:
     #   header_name: Authorization    # E4 - optional health-check header; its value
     #   header_file: hc-token         #   is read from data/config/secrets/<file>
     #                                 #   at render time (never stored in this file)
+
+# E3 - TCP streams (mode tcp) on dedicated ports, managed in the admin GUI under
+# "TCP streams". Each listen port must also be published for the haproxy service
+# in docker-compose.yml (the GUI shows the exact lines).
+# tcp_streams:
+#   - name: "Postgres"
+#     port: 5432                      # listen port (1-65535, not 80/443/8404)
+#     backend: "db:5432"              # single target  OR  use "servers" below
+#     # servers: ["db1:5432", "db2:5432"]   # several targets -> load balancing
+#     # balance: leastconn            # leastconn (default) | roundrobin (>= 2 servers)
+#     tls: false                      # true = TLS termination with the platform cert
+#     clitcpka: false                 # TCP keepalive towards the client
+#     # timeout_client: 1h            # default 1h (long-lived TCP connections)
+#     # timeout_server: 1h
+#     enabled: true
