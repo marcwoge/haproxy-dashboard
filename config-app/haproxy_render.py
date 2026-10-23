@@ -226,15 +226,17 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     alias_lines = _alias_lines(config.get("domain_aliases"), domain)   # #8
     extra_certs = sorted(extra_certs or [])                            # #9 (SNI)
 
-    # #6: timeout client im Frontend auf das Maximum der Service-Timeouts anheben,
-    # sonst greift der 60s-Client-Timeout vor einem hoeheren Server-/Tunnel-Timeout.
+    # #6/#15: timeout client im Frontend an das laengste timeout_server anheben,
+    # sonst greift der 60s-Client-Timeout vor einer langen Server-Antwort. NICHT
+    # aus timeout_tunnel ableiten: 'timeout tunnel' ersetzt nach dem Upgrade
+    # (WebSocket/CONNECT) ohnehin client+server; ein globaler Client-Timeout von
+    # z. B. 1h wuerde sonst alle HTTP-Verbindungen fuer Slowloris anfaellig machen.
     max_to = 60
     for s in all_services:
         if not s.get("enabled", True):
             continue
-        for key in ("timeout_server", "timeout_tunnel"):
-            if _valid_timeout(s.get(key)):
-                max_to = max(max_to, int(_ht_seconds(s.get(key))))
+        if _valid_timeout(s.get("timeout_server")):
+            max_to = max(max_to, int(_ht_seconds(s.get("timeout_server"))))
 
     lines = []
     A = lines.append
@@ -253,6 +255,19 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     A(f"    ssl-default-bind-ciphersuites {TLS_CIPHERSUITES}")
     A("    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets")
     A("")
+    # E3/#13: eigene Defaults fuer TCP-Streams OHNE HTTP-Optionen -> keine
+    # 'option forwardfor ignored'-Warnungen. MUSS vor den unbenannten (HTTP-)
+    # Defaults stehen: HAProxy nimmt die LETZTE Defaults-Sektion als implizite
+    # Vorgabe; die benannte 'tcp' wird ausschliesslich ueber 'from tcp' genutzt.
+    A("defaults tcp")
+    A("    log global")
+    A("    mode tcp")
+    A("    option tcplog")
+    A("    timeout connect 5s")
+    A("    timeout client 1h")
+    A("    timeout server 1h")
+    A("    default-server init-addr last,libc,none")
+    A("")
     A("defaults")
     A("    log global")
     A("    mode http")
@@ -263,6 +278,9 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     A("    timeout client 60s")
     A("    timeout server 60s")
     A("    timeout check 3s")
+    # #15: langsam gesendete Request-Header nicht vom grossen Client-Timeout
+    # profitieren lassen (Slowloris-Schutz). Gilt nur in der HTTP-Phase.
+    A("    timeout http-request 10s")
     A("    default-server init-addr last,libc,none")
     A("")
     A("# Docker-internes DNS fuer Backends per Container-Name")
@@ -417,10 +435,10 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     # Plattform-Zertifikat. Die Host-Ports muessen in docker-compose.yml published
     # werden (siehe Admin-GUI-Hinweis), HAProxy bindet sie nur containerintern.
     for sid, st, port, servers in _tcp_streams(config):
+        # 'from tcp' -> erbt die TCP-Defaults (mode tcp, option tcplog, ...) statt
+        # der HTTP-Defaults (#13: keine 'option forwardfor ignored'-Warnungen).
         A(f"# TCP-Stream: {_clean_comment(st.get('name', sid))}")
-        A(f"frontend fe_{sid}")
-        A("    mode tcp")
-        A("    option tcplog")
+        A(f"frontend fe_{sid} from tcp")
         bind = f"    bind :{port}"
         if st.get("tls"):
             bind += f" ssl crt {CERT_PEM}"     # TLS-Terminierung (Plattform-Zertifikat)
@@ -431,8 +449,7 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
         A(f"    timeout client {tc if _valid_timeout(tc) else TCP_DEFAULT_TIMEOUT}")
         A(f"    default_backend bk_{sid}")
         A("")
-        A(f"backend bk_{sid}")
-        A("    mode tcp")
+        A(f"backend bk_{sid} from tcp")
         if len(servers) > 1:   # Lastverteilung nur ab 2 Servern (Default leastconn).
             balance = (st.get("balance") or "").lower()
             if balance not in _BALANCE:

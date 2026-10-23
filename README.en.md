@@ -79,7 +79,9 @@ In the admin GUI under **"Domains & certificates"**:
 
 - **Domain aliases (301):** redirect old domains to a platform path with a 301 (path
   + query preserved), e.g. `wiki.example.local /wiki keep`. "keep" avoids a double
-  prefix when the path already starts with the target.
+  prefix when the path already starts with the target. Optionally add `root=/target`
+  (`host /wiki keep root=/wiki/home`) to send the alias domain's "/" to a dedicated
+  target, independently of path preservation.
 - **Additional certificates (SNI):** besides the primary certificate (in `certs/`),
   upload more (certificate + key, or a combined PEM). HAProxy selects by SNI. Subject,
   issuer, SANs and expiry are shown; **private keys are never shown or served**.

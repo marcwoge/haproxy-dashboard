@@ -80,7 +80,9 @@ Im Admin-GUI unter **„Domains & Zertifikate"**:
 
 - **Domain-Aliase (301):** alte Domains per 301 auf einen Plattform-Pfad umleiten
   (Pfad + Query bleiben erhalten), z. B. `wiki.example.local /wiki keep`. „keep“
-  verhindert ein doppeltes Präfix, wenn der Pfad schon mit dem Ziel beginnt.
+  verhindert ein doppeltes Präfix, wenn der Pfad schon mit dem Ziel beginnt. Optional
+  `root=/ziel` ergänzen (`host /wiki keep root=/wiki/home`), um „/" der Alias-Domain
+  getrennt vom Pfad-Erhalt auf ein eigenes Ziel zu leiten.
 - **Zusätzliche Zertifikate (SNI):** neben dem primären Zertifikat (in `certs/`)
   weitere hochladen (Zertifikat + Schlüssel oder ein kombiniertes PEM). HAProxy wählt
   anhand SNI. Angezeigt werden Subject, Aussteller, SANs und Ablauf; **private

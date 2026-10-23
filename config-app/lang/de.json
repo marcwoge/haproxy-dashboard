@@ -126,8 +126,8 @@
 
   "dc.heading": "Domains & Zertifikate",
   "dc.aliases_heading": "Domain-Aliase (301-Weiterleitung)",
-  "dc.aliases_label": "Eine pro Zeile: host /pfad [keep]",
-  "dc.aliases_hint": "Beispiel: wiki.example.local /wiki keep — leitet die alte Domain per 301 auf die Plattform (Pfad + Query bleiben). „keep“ verhindert doppeltes Präfix. Für HTTPS auf Alias-Domains ein passendes Zertifikat hinterlegen.",
+  "dc.aliases_label": "Eine pro Zeile: host /pfad [keep] [root=/pfad]",
+  "dc.aliases_hint": "Beispiel: wiki.example.local /wiki keep — leitet die alte Domain per 301 auf die Plattform (Pfad + Query bleiben). „keep“ verhindert doppeltes Präfix. „root=/ziel“ setzt ein eigenes Ziel für „/“ (getrennt vom Pfad-Erhalt). Für HTTPS auf Alias-Domains ein passendes Zertifikat hinterlegen.",
   "dc.aliases_save": "Aliase speichern",
   "dc.certs_heading": "Zusätzliche Zertifikate (SNI)",
   "dc.certs_intro": "Das primäre Zertifikat liegt in certs/. Hier zusätzliche Zertifikate (z. B. für Alias-Domains) hochladen – HAProxy wählt per SNI. Private Schlüssel werden nie angezeigt.",

@@ -679,15 +679,26 @@ _RE_HDR = re.compile(r"^[A-Za-z0-9-]{1,40}$")
 
 
 def _parse_aliases(raw: str) -> list:
-    """Textarea-Zeilen 'host /pfad [keep]' -> Liste von Alias-Dicts."""
+    """Textarea-Zeilen 'host /pfad [keep] [root=/pfad]' -> Liste von Alias-Dicts.
+    #12: root= erhaelt das in v1.4 eingefuehrte root_to-Ziel beim GUI-Speichern."""
     out = []
     for line in (raw or "").splitlines():
         parts = line.split()
         if not parts:
             continue
-        rt = _norm_path(parts[1]) if len(parts) > 1 else "/"
-        keep = len(parts) > 2 and parts[2].lower() in ("keep", "keep_path", "true", "1")
-        out.append({"host": parts[0].strip().lower(), "redirect_to": rt, "keep_path": keep})
+        rt, keep, root_to = "/", False, ""
+        for tok in parts[1:]:
+            low = tok.lower()
+            if low in ("keep", "keep_path", "true", "1"):
+                keep = True
+            elif low.startswith("root="):
+                root_to = tok[len("root="):]
+            elif rt == "/":          # erstes Nicht-Flag = Ziel-Pfad
+                rt = tok
+        a = {"host": parts[0].strip().lower(), "redirect_to": _norm_path(rt), "keep_path": keep}
+        if root_to:
+            a["root_to"] = _norm_path(root_to)
+        out.append(a)
     return out
 
 
@@ -695,6 +706,9 @@ def _valid_aliases(aliases) -> bool:
     for a in aliases:
         rt = a.get("redirect_to", "")
         if not _RE_HOST.match(a.get("host", "")) or not _RE_PATH.match(rt) or ".." in rt:
+            return False
+        root_to = a.get("root_to", "")   # #12: optionales /-Ziel wie ein Pfad pruefen
+        if root_to and (not _RE_PATH.match(root_to) or ".." in root_to):
             return False
     return True
 
