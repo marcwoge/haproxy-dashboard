@@ -106,7 +106,9 @@ def _deny_list(path: str, deny_paths) -> list:
 
 def _alias_lines(aliases, domain: str) -> list:
     """#8: 301-Redirects von Alias-Domains auf die Plattform-Domain (Pfad+Query
-    bleiben via %[url] erhalten). Wird in fe_http UND fe_https eingesetzt."""
+    bleiben via %[pathq] erhalten). Wird in fe_http UND fe_https eingesetzt.
+    %[pathq] statt %[url]: bei HTTP/2 (und HTTP/1.1 mit absoluter URI) enthaelt
+    url Schema + Host, das ergaebe https://<domain>https://<alias>/pfad."""
     out = []
     if not (domain and _SAFE_HOST.match(domain)):
         return out
@@ -124,13 +126,13 @@ def _alias_lines(aliases, domain: str) -> list:
             if _SAFE_PATH.match(rr) and ".." not in rr:
                 out.append(f"    http-request redirect code 301 location https://{domain}{rr} if {acl} {{ path / }}")
         if rt == "/":
-            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}%[pathq] if {acl}")
         elif a.get("keep_path"):
             # Pfad enthaelt das Praefix bereits -> unveraendert; sonst voranstellen.
-            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl} {{ path_beg {rt} }}")
-            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}%[pathq] if {acl} {{ path_beg {rt} }}")
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[pathq] if {acl}")
         else:
-            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[pathq] if {acl}")
     return out
 
 
