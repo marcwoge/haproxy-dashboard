@@ -2,9 +2,16 @@
 import ipaddress
 import os
 import re
+from pathlib import Path
 
 # Pfad zum kombinierten PEM IM haproxy-Container (siehe entrypoint.sh)
 CERT_PEM = "/usr/local/etc/haproxy/platform.pem"
+
+# E4: Verzeichnis mit Secret-Dateien fuer Health-Check-Header (config-app-seitig).
+HC_SECRET_DIR = os.environ.get("HC_SECRET_DIR", "/app/config/secrets")
+# E6: optionaler externer Syslog-Server (zusaetzlich zu stdout). Leer = nur stdout.
+SYSLOG_ADDRESS = os.environ.get("SYSLOG_ADDRESS", "").strip()
+_BALANCE = ("roundrobin", "leastconn")
 # Verzeichnis zusaetzlicher Zertifikate (SNI) IM haproxy-Container (Bind-Mount von
 # data/config/certs). HAProxy waehlt anhand SNI; leer -> nicht referenziert.
 EXTRA_CERT_DIR = "/certs-extra"
@@ -104,6 +111,12 @@ def _alias_lines(aliases, domain: str) -> list:
             continue
         acl = f"host_alias_{i}"
         out.append(f"    acl {acl} hdr(host),field(1,:) -i {host}")
+        # E5: bare "/" auf der Alias-Domain getrennt vom Pfad-Erhalt umleiten.
+        root_to = str(a.get("root_to") or "").strip()
+        if root_to:
+            rr = _norm_path(root_to)
+            if _SAFE_PATH.match(rr) and ".." not in rr:
+                out.append(f"    http-request redirect code 301 location https://{domain}{rr} if {acl} {{ path / }}")
         if rt == "/":
             out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl}")
         elif a.get("keep_path"):
@@ -140,6 +153,42 @@ def _server_opts(backend_addr: str, inter: str = "5s", extra: str = "") -> str:
     return base + " resolvers docker init-addr last,libc,none"
 
 
+def _service_servers(s) -> list:
+    """E1: gueltige Backend-Adressen. `servers:` (mehrere) hat Vorrang, sonst das
+    einzelne `backend`-Feld. Ungueltige/leere Adressen werden verworfen."""
+    raw = s.get("servers")
+    if isinstance(raw, list) and raw:
+        addrs = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        addrs = [str(s.get("backend", "")).strip()]
+    return [a for a in addrs if a and _SAFE_BACKEND.match(a)]
+
+
+_RE_HDRNAME = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+
+
+def _hc_header(hc) -> str:
+    """E4: optionaler Health-Check-Header, dessen WERT aus einer Secret-Datei kommt
+    (nicht aus services.yaml). Leer, wenn nicht konfiguriert/lesbar/ungueltig."""
+    name = str(hc.get("header_name") or "").strip()
+    fname = os.path.basename(str(hc.get("header_file") or "").strip())
+    if not _RE_HDRNAME.match(name) or not fname:
+        return ""
+    try:
+        val = (Path(HC_SECRET_DIR) / fname).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    # Steuerzeichen sowie " und \ wuerden das Quoting sprengen -> abweisen.
+    if not val or any(ord(c) < 0x20 or ord(c) == 0x7f for c in val) \
+            or '"' in val or "\\" in val:
+        return ""   # keine Header-Injection
+    # '%' ist in HAProxy-Log-Format-Strings ein Sonderzeichen -> verdoppeln.
+    val = val.replace("%", "%%")
+    # In doppelte Anfuehrungszeichen: so bleibt ein Wert mit Leerzeichen
+    # (z. B. "Bearer <token>") EIN Argument an 'http-check send ... hdr'.
+    return f' hdr {name} "{val}"'
+
+
 def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     all_services = config.get("services", [])
     domain = str(config.get("domain", "")).strip()
@@ -164,6 +213,8 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     A("")
     A("global")
     A("    log stdout format raw local0")
+    if SYSLOG_ADDRESS and re.match(r"^[A-Za-z0-9@._:/-]{1,120}$", SYSLOG_ADDRESS):
+        A(f"    log {SYSLOG_ADDRESS} local0")   # E6: zusaetzlich an externen Syslog
     A("    maxconn 4096")
     A("    tune.ssl.default-dh-param 2048")
     A("    # N2: moderne TLS-Defaults, min. TLS 1.2")
@@ -221,6 +272,7 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
     # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
     A("    http-request set-header X-Client-IP %[src]")
+    A("    http-request set-header X-Forwarded-Port %[dst_port]")   # E5
     if max_to > 60:
         A(f"    timeout client {max_to}s")   # #6: an laengstes Service-Timeout anpassen
     if HSTS_ENABLED:
@@ -234,27 +286,38 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     for idx, s in enumerate(all_services):
         if not s.get("enabled", True):
             continue
-        if not s.get("backend"):
+        servers = _service_servers(s)      # E1: ein oder mehrere Backends
+        if not servers:
             continue
         sid = _safe_id(s.get("name", "svc"), idx)
         path = _norm_path(s.get("path", "/"))
         if path == "/":
             continue  # "/" ist dem Dashboard vorbehalten
-        if not _is_safe(path, str(s.get("backend", "")).strip()):
-            A(f"    # uebersprungen (unsichere Werte): {_clean_comment(s.get('name', sid))}")
+        if not _SAFE_PATH.match(path) or ".." in path:
+            A(f"    # uebersprungen (unsicherer Pfad): {_clean_comment(s.get('name', sid))}")
             continue
         A(f"    # {_clean_comment(s.get('name', sid))}")
-        A(f"    acl is_{sid} path {path}")
-        A(f"    acl is_{sid} path_beg {path}/")
+        # E2: Match-Art exact (Default) oder prefix (path_beg ohne abschliessendes /).
+        if (s.get("match") or "exact").lower() == "prefix":
+            A(f"    acl is_{sid} path_beg {path}")
+        else:
+            A(f"    acl is_{sid} path {path}")
+            A(f"    acl is_{sid} path_beg {path}/")
+        # E2: zusaetzliche Pfade auf dasselbe Backend (ohne eigene Kachel).
+        for ep in (s.get("extra_paths") or []):
+            epn = _norm_path(str(ep))
+            if epn != "/" and _SAFE_PATH.match(epn) and ".." not in epn:
+                A(f"    acl is_{sid} path {epn}")
+                A(f"    acl is_{sid} path_beg {epn}/")
         # #7: gesperrte Unterpfade -> 403. http-request wird von HAProxy ohnehin
         # vor use_backend verarbeitet; alle use_backend kommen daher gesammelt
         # ans Ende (sonst warnt HAProxy "http-request after use_backend").
         denies = _deny_list(path, s.get("deny_paths"))
         if denies:
             A(f"    http-request deny deny_status 403 if is_{sid} {{ path_beg {' '.join(denies)} }}")
-        backends.append((sid, s, path))
+        backends.append((sid, s, path, servers))
 
-    for sid, _s, _p in backends:
+    for sid, _s, _p, _sv in backends:
         A(f"    use_backend bk_{sid} if is_{sid}")
     A("    default_backend bk_dashboard")
     A("")
@@ -263,13 +326,19 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     A("    server dashboard config-app:5000 check inter 5s resolvers docker init-addr last,libc,none")
     A("")
 
-    for sid, s, path in backends:
+    for sid, s, path, servers in backends:
         scheme = (s.get("scheme") or "http").lower()
-        backend_addr = str(s["backend"]).strip()
         A(f"backend bk_{sid}")
         if s.get("strip_path"):
             # Prefix /xyz vor Weiterleitung entfernen -> Backend sieht / ...
             A(f"    http-request set-path %[path,regsub(^{path}/?,/)]")
+
+        # E1: Lastverteilung nur bei mehreren Servern (Default roundrobin).
+        if len(servers) > 1:
+            balance = (s.get("balance") or "").lower()
+            if balance not in _BALANCE:
+                balance = "roundrobin"
+            A(f"    balance {balance}")
 
         # #6: optionale Timeouts pro Service (Default = globaler Wert).
         if _valid_timeout(s.get("timeout_server")):
@@ -292,6 +361,7 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
             if domain and _SAFE_HOST.match(domain):
                 send += f" hdr Host {domain}"
             send += " hdr X-Forwarded-Proto https"
+            send += _hc_header(hc)   # E4: Header-Wert aus Secret-Datei
             A(send)
             expect = str(hc.get("expect_status") or "").strip()
             if _RE_EXPECT.match(expect):
@@ -300,15 +370,16 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
                 A("    http-check expect rstatus ^([23][0-9][0-9])$")   # Default: 2xx/3xx
             extra = "fall 3 rise 2"
 
-        srv = f"    server s_{sid} {backend_addr}"
-        if scheme == "https":
-            srv += " ssl"
-            if s.get("ssl_verify"):
-                srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
-            else:
-                srv += " verify none"
-        srv += " " + _server_opts(backend_addr, inter=inter, extra=extra)
-        A(srv)
+        for n, addr in enumerate(servers):   # E1: ein oder mehrere Server
+            srv = f"    server s_{sid}_{n} {addr}"
+            if scheme == "https":
+                srv += " ssl"
+                if s.get("ssl_verify"):
+                    srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
+                else:
+                    srv += " verify none"
+            srv += " " + _server_opts(addr, inter=inter, extra=extra)
+            A(srv)
         A("")
 
     return "\n".join(lines) + "\n"

@@ -12,6 +12,9 @@ language: de                  # UI language (de, en, ...) - see config-app/lang/
 # domain_aliases:
 #   - {host: wiki.example.local, redirect_to: /wiki, keep_path: true}
 #   - {host: forms.example.local, redirect_to: /forms}
+# E5: "root_to" redirects a bare "/" on the alias domain to its own target,
+#     independent of path preservation for the rest of the domain, e.g.:
+#   - {host: app.example.local, redirect_to: /app, keep_path: true, root_to: /app/home}
 
 theme:
   title: "Acme Platform"
@@ -58,7 +61,18 @@ services:
     # timeout_server: 600s            # long uploads/exports (default: global 60s)
     # timeout_tunnel: 1h              # WebSocket / long-polling
     # deny_paths: [/admin, /setup]    # sub-paths (relative to path) -> 403
+    # E1 - several backends + load balancing (overrides "backend" above):
+    # servers: ["10.0.0.11:8080", "10.0.0.12:8080"]
+    # balance: roundrobin             # roundrobin (default) | leastconn (>= 2 servers)
+    # E2 - path matching and extra paths routed to the same backend:
+    # match: exact                    # exact (default) | prefix (path_beg, no trailing /)
+    # extra_paths: [/api, /static]    # additional paths, no separate dashboard tile
+    # E5 - keep the route but hide the dashboard tile:
+    # hidden: false
     # healthcheck:                    # HTTP health check instead of a plain TCP check
     #   uri: /health                  #   default: the service path
     #   expect_status: "200|301|302"  #   default: any 2xx/3xx
     #   interval: 10s
+    #   header_name: Authorization    # E4 - optional health-check header; its value
+    #   header_file: hc-token         #   is read from data/config/secrets/<file>
+    #                                 #   at render time (never stored in this file)

@@ -27,7 +27,8 @@ from flask import (Flask, Response, abort, flash, redirect, render_template,
 from werkzeug.utils import secure_filename
 from waitress import serve
 
-from haproxy_render import render as render_haproxy, _norm_path, _safe_id, _valid_timeout
+from haproxy_render import (render as render_haproxy, _norm_path, _safe_id,
+                            _valid_timeout, _service_servers)
 import updater
 import notifier
 import i18n
@@ -393,11 +394,15 @@ def fetch_backend_status() -> dict:
         header = lines[0].lstrip("# ").split(",")
         for row in csv.DictReader(lines[1:], fieldnames=header):
             px, sv = row.get("pxname"), row.get("svname")
-            if not px or sv in (None, "FRONTEND", "BACKEND"):
+            if not px or not px.startswith("bk_") or sv in (None, "FRONTEND"):
                 continue
-            if px.startswith("bk_"):
-                result[px] = {"status": row.get("status", ""),
-                              "check": row.get("check_status", "")}
+            entry = result.setdefault(px, {"status": "", "check": "", "servers": []})
+            if sv == "BACKEND":   # Aggregat-Status des Backends
+                entry["status"] = row.get("status", "")
+                entry["check"] = row.get("check_status", "")
+            else:                 # E1: Status je einzelnem Server
+                entry["servers"].append({"name": sv, "status": row.get("status", ""),
+                                         "check": row.get("check_status", "")})
     _STATS_CACHE["ts"], _STATS_CACHE["data"] = now, result
     return result
 
@@ -440,17 +445,25 @@ def _service_states(cfg: dict):
         st = bk.get(name)
         if not s.get("enabled", True):
             status = "disabled"
-        elif not s.get("backend") or _norm_path(s.get("path", "/")) == "/":
+        elif not _service_servers(s) or _norm_path(s.get("path", "/")) == "/":
             status = "none"
         elif stats_error is not None or st is None:
             status = "unknown"
         else:
             status = st.get("status", "")
+        # E1: Status je einzelnem Server (fuer Multi-Server-Backends im Admin).
+        servers = []
+        if st and stats_error is None:
+            for sv in st.get("servers", []):
+                servers.append({"name": sv["name"], "status": sv["status"],
+                                "dot": _dot_class(sv["status"])})
         states.append({
             "index": idx,
             "status": status,
             "dot": _dot_class(status),
             "check": (st or {}).get("check", ""),
+            "servers": servers,
+            "n_servers": len(_service_servers(s)),
         })
     return states, stats_error
 
@@ -552,6 +565,11 @@ def _parse_list(raw: str) -> list:
     return [_norm_path(x.strip()) for x in re.split(r"[,\r\n]+", raw or "") if x.strip()]
 
 
+def _parse_servers(raw: str) -> list:
+    """E1: komma-/zeilengetrennte Backend-Adressen (host:port), unveraendert."""
+    return [x.strip() for x in re.split(r"[,\r\n]+", raw or "") if x.strip()]
+
+
 def _service_from_form(form) -> dict:
     svc = {
         "name": form.get("name", "").strip(),
@@ -569,13 +587,26 @@ def _service_from_form(form) -> dict:
         "timeout_tunnel": form.get("timeout_tunnel", "").strip().lower(),
         # #7 gesperrte Unterpfade (relativ zum Service-Pfad)
         "deny_paths": _parse_list(form.get("deny_paths", "")),
+        # E2 Match-Art + zusaetzliche Pfade; E5 Kachel ausblenden
+        "match": (form.get("match", "exact").strip().lower() or "exact"),
+        "extra_paths": _parse_list(form.get("extra_paths", "")),
+        "hidden": form.get("hidden") == "on",
     }
-    # #10 optionaler HTTP-Health-Check
+    # E1 mehrere Server + Lastverteilung (optional; sonst das einzelne backend-Feld)
+    servers = _parse_servers(form.get("servers", ""))
+    if servers:
+        svc["servers"] = servers
+    balance = form.get("balance", "").strip().lower()
+    if balance in ("roundrobin", "leastconn"):
+        svc["balance"] = balance
+    # #10 optionaler HTTP-Health-Check (+ E4 Header aus Secret-Datei)
     if form.get("hc_enabled") == "on":
         svc["healthcheck"] = {
             "uri": form.get("hc_uri", "").strip(),
             "expect_status": form.get("hc_expect", "").strip(),
             "interval": form.get("hc_interval", "").strip().lower(),
+            "header_name": form.get("hc_header_name", "").strip(),
+            "header_file": form.get("hc_header_file", "").strip(),
         }
     return svc
 
@@ -594,6 +625,8 @@ _RE_TARGET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _RE_EXPECT = re.compile(r"^[0-9|]{1,40}$")
 # #8: Alias-Domain-Hostname (streng, kein Schema/Pfad/Port).
 _RE_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
+# E4: HTTP-Header-Name (Token-Zeichen).
+_RE_HDR = re.compile(r"^[A-Za-z0-9-]{1,40}$")
 
 
 def _parse_aliases(raw: str) -> list:
@@ -651,15 +684,30 @@ def validate_service(svc: dict) -> list:
         if not _RE_PATH.match(d) or ".." in d or d == "/":
             errors.append("flash.field_invalid_deny")
             break
-    # #10 Health-Check: URI/Statusliste/Intervall validieren
+    # E1 mehrere Server: jede Adresse wie ein Backend
+    for sv in svc.get("servers", []) or []:
+        if not _RE_BACKEND.match(sv):
+            errors.append("flash.field_invalid_backend")
+            break
+    if svc.get("balance") and svc["balance"] not in ("roundrobin", "leastconn"):
+        errors.append("flash.field_invalid_balance")
+    # E2 Match-Art + zusaetzliche Pfade
+    if svc.get("match") and svc["match"] not in ("exact", "prefix"):
+        errors.append("flash.field_invalid_match")
+    for ep in svc.get("extra_paths", []) or []:
+        if not _RE_PATH.match(ep) or ".." in ep:
+            errors.append("flash.field_invalid_path")
+            break
+    # #10 Health-Check: URI/Statusliste/Intervall + E4 Header-Name/Secret-Datei
     hc = svc.get("healthcheck") or {}
     if hc:
-        uri = hc.get("uri", "")
-        exp = hc.get("expect_status", "")
-        iv = hc.get("interval", "")
+        uri, exp, iv = hc.get("uri", ""), hc.get("expect_status", ""), hc.get("interval", "")
+        hn, hf = hc.get("header_name", ""), hc.get("header_file", "")
         if (uri and (not _RE_PATH.match(uri) or ".." in uri)) \
                 or (exp and not _RE_EXPECT.match(exp)) \
-                or (iv and not _valid_timeout(iv)):
+                or (iv and not _valid_timeout(iv)) \
+                or (hn and not _RE_HDR.match(hn)) \
+                or (hf and ("/" in hf or ".." in hf or _has_ctrl(hf))):
             errors.append("flash.field_invalid_healthcheck")
     return list(dict.fromkeys(errors))   # deduplizieren, Reihenfolge erhalten
 
@@ -694,7 +742,7 @@ def _dashboard_services(cfg: dict):
         status_by_index = {st["index"]: st for st in states}
     services = []
     for idx, s in enumerate(cfg["services"]):
-        if not s.get("enabled", True):
+        if not s.get("enabled", True) or s.get("hidden"):   # E5: Route aktiv, keine Kachel
             continue
         item = dict(s)
         st = status_by_index.get(idx)

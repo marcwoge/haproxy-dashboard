@@ -103,8 +103,14 @@
                     id="st-{{ loop.index0 }}"
                     title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
           <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}{% if s.deny_paths %} <span class="src-badge" title="{{ t('svc.locked') }}">🔒</span>{% endif %}</td>
-          <td><code>{{ s.path }}</code></td>
-          <td><code>{{ s.backend }}</code></td>
+          <td><code>{{ s.path }}</code>{% if s.hidden %} <span class="src-badge" title="{{ t('svc.f_hidden') }}">🙈</span>{% endif %}</td>
+          <td>
+            <code>{{ s.backend or (s.servers[0] if s.servers else '') }}</code>
+            {% if st and st.n_servers > 1 %}
+              {% set up = st.servers | selectattr('dot', 'equalto', 'up') | list | length %}
+              <span class="src-badge" title="{{ t('svc.servers_up', up=up, total=st.n_servers) }}">{{ up }}/{{ st.n_servers }}</span>
+            {% endif %}
+          </td>
           <td>{{ s.scheme or 'http' }}</td>
           <td>{{ t('common.yes') if s.ssl_verify else t('common.no') }}</td>
           <td>{{ '✓' if s.enabled else '–' }}</td>
@@ -173,6 +179,30 @@
       </label>
 
       <p class="upd-hint full" style="grid-column:1/-1; margin:.5rem 0 -.2rem; font-weight:600; opacity:.9;">{{ t('svc.adv_heading') }}</p>
+      <label class="full">{{ t('svc.f_servers') }}
+        <textarea name="servers" rows="2" placeholder="10.0.0.11:8080&#10;10.0.0.12:8080">{{ (e.servers or []) | join('\n') }}</textarea>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.f_servers_hint') }}</p>
+      <label>{{ t('svc.f_balance') }}
+        <select name="balance">
+          <option value="roundrobin" {{ 'selected' if (e.balance or 'roundrobin') == 'roundrobin' }}>{{ t('svc.balance_rr') }}</option>
+          <option value="leastconn" {{ 'selected' if e.balance == 'leastconn' }}>{{ t('svc.balance_lc') }}</option>
+        </select>
+      </label>
+      <label>{{ t('svc.f_match') }}
+        <select name="match">
+          <option value="exact" {{ 'selected' if (e.match or 'exact') == 'exact' }}>{{ t('svc.match_exact') }}</option>
+          <option value="prefix" {{ 'selected' if e.match == 'prefix' }}>{{ t('svc.match_prefix') }}</option>
+        </select>
+      </label>
+      <label class="full">{{ t('svc.f_extra_paths') }}
+        <textarea name="extra_paths" rows="2" placeholder="/api&#10;/static">{{ (e.extra_paths or []) | join('\n') }}</textarea>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.f_extra_paths_hint') }}</p>
+      <label class="check full">
+        <input type="checkbox" name="hidden" {{ 'checked' if e.hidden }}>
+        {{ t('svc.f_hidden') }}
+      </label>
       <label>{{ t('svc.f_timeout_server') }}
         <input name="timeout_server" value="{{ e.timeout_server or '' }}" placeholder="600s">
       </label>
@@ -197,7 +227,14 @@
       <label>{{ t('svc.hc_interval') }}
         <input name="hc_interval" value="{{ hc.interval or '' }}" placeholder="10s">
       </label>
+      <label>{{ t('svc.hc_header_name') }}
+        <input name="hc_header_name" value="{{ hc.header_name or '' }}" placeholder="Authorization">
+      </label>
+      <label>{{ t('svc.hc_header_file') }}
+        <input name="hc_header_file" value="{{ hc.header_file or '' }}" placeholder="hc-token">
+      </label>
       <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.hc_hint') }}</p>
+      <p class="upd-hint full" style="margin-top:-.6rem;">{{ t('svc.hc_header_hint') }}</p>
 
       <div class="full form-actions">
         <button class="btn" type="submit">{{ t('common.save') }}</button>

@@ -28,6 +28,11 @@ services:
       - CONFIG_DIR=/app/config
       - HAPROXY_OUT=/app/haproxy_out
       - UPDATE_DIR=/app/update
+      # E4: directory holding health-check header secrets (read at render time).
+      - HC_SECRET_DIR=${HC_SECRET_DIR:-/app/config/secrets}
+      # E6: optional syslog target for HAProxy (e.g. 10.0.0.5:514 or /dev/log).
+      # Empty = file logging only. Rendered into the generated config.
+      - SYSLOG_ADDRESS=${SYSLOG_ADDRESS:-}
       # APP_VERSION is NOT set here - it is baked into the image (build arg),
       # so a pulled GHCR image reports its real release version.
       - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}
@@ -75,6 +80,9 @@ services:
       - config-app
     environment:
       - PLATFORM_DOMAIN=${PLATFORM_DOMAIN:-platform.example.local}
+      # E6: log retention in the in-container log file (longer history).
+      - LOG_ROTATE_AT=${LOG_ROTATE_AT:-5000}
+      - LOG_KEEP_LINES=${LOG_KEEP_LINES:-600}
     ports:
       - "80:80"
       - "443:443"
