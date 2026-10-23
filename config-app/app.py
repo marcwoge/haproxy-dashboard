@@ -28,7 +28,8 @@ from werkzeug.utils import secure_filename
 from waitress import serve
 
 from haproxy_render import (render as render_haproxy, _norm_path, _safe_id,
-                            _valid_timeout, _service_servers)
+                            _valid_timeout, _service_servers, _valid_port,
+                            _tcp_streams)
 import updater
 import notifier
 import i18n
@@ -302,6 +303,7 @@ def load_config() -> dict:
     lang = str(cfg.get("language") or DEFAULT_LANG)
     cfg["language"] = lang if lang in i18n.available() else DEFAULT_LANG
     cfg.setdefault("domain_aliases", [])
+    cfg.setdefault("tcp_streams", [])   # E3
     return cfg
 
 
@@ -468,6 +470,27 @@ def _service_states(cfg: dict):
     return states, stats_error
 
 
+def _stream_states(cfg: dict) -> dict:
+    """E3: Status je TCP-Stream (aus den HAProxy-Stats, analog _service_states).
+    Rueckgabe: {index: {status, dot}}."""
+    bk = fetch_backend_status()
+    stats_error = "_error" in bk
+    states = {}
+    for idx, st in enumerate(cfg.get("tcp_streams", [])):
+        name = f"bk_tcp_{_safe_id(st.get('name', 'stream'), idx)}"
+        entry = bk.get(name)
+        if not st.get("enabled", True):
+            status = "disabled"
+        elif not _valid_port(st.get("port")) or not _service_servers(st):
+            status = "none"
+        elif stats_error or entry is None:
+            status = "unknown"
+        else:
+            status = entry.get("status", "")
+        states[idx] = {"status": status, "dot": _dot_class(status)}
+    return states
+
+
 # ----------------------------------------------------------------------------
 # Basic-Auth. H1: leeres Passwort SPERRT das Admin-GUI (statt es offen zu lassen).
 # ----------------------------------------------------------------------------
@@ -611,6 +634,32 @@ def _service_from_form(form) -> dict:
     return svc
 
 
+def _stream_from_form(form) -> dict:
+    """E3: TCP-Stream aus dem Admin-Formular (eigener Port, mode tcp)."""
+    st = {
+        "name": form.get("name", "").strip(),
+        "backend": form.get("backend", "").strip(),
+        "tls": form.get("tls") == "on",
+        "clitcpka": form.get("clitcpka") == "on",
+        "timeout_client": form.get("timeout_client", "").strip().lower(),
+        "timeout_server": form.get("timeout_server", "").strip().lower(),
+        "enabled": form.get("enabled") == "on",
+    }
+    # Port als int ablegen; bei Unsinn roh lassen, damit die Validierung greift.
+    raw_port = form.get("port", "").strip()
+    try:
+        st["port"] = int(raw_port)
+    except (TypeError, ValueError):
+        st["port"] = raw_port
+    servers = _parse_servers(form.get("servers", ""))
+    if servers:
+        st["servers"] = servers
+    balance = form.get("balance", "").strip().lower()
+    if balance in ("roundrobin", "leastconn"):
+        st["balance"] = balance
+    return st
+
+
 # --- K2: strikte Validierung gegen HAProxy-Config-Injection ------------------
 # Pfad: fuehrender Slash, nur unbedenkliche Zeichen (keine Whitespace/Newline).
 _RE_PATH = re.compile(r"^/[A-Za-z0-9_./-]*$")
@@ -712,6 +761,33 @@ def validate_service(svc: dict) -> list:
     return list(dict.fromkeys(errors))   # deduplizieren, Reihenfolge erhalten
 
 
+def validate_stream(st: dict) -> list:
+    """E3: Validiert einen TCP-Stream. Fehler-Keys wie validate_service."""
+    errors = []
+    name = st.get("name", "")
+    if not name or _has_ctrl(name):
+        errors.append("flash.field_invalid_name")
+    if not _valid_port(st.get("port")):
+        errors.append("flash.field_invalid_port")
+    backend = st.get("backend", "")
+    if backend and not _RE_BACKEND.match(backend):
+        errors.append("flash.field_invalid_backend")
+    for sv in st.get("servers", []) or []:
+        if not _RE_BACKEND.match(sv):
+            errors.append("flash.field_invalid_backend")
+            break
+    # Mindestens eine gueltige Zieladresse (servers oder backend).
+    if not _service_servers(st):
+        errors.append("flash.field_invalid_backend")
+    if st.get("balance") and st["balance"] not in ("roundrobin", "leastconn"):
+        errors.append("flash.field_invalid_balance")
+    for tk in ("timeout_client", "timeout_server"):
+        v = st.get(tk, "")
+        if v and not _valid_timeout(v):
+            errors.append("flash.field_invalid_timeout")
+    return list(dict.fromkeys(errors))
+
+
 def _config_file(name: str) -> Path | None:
     """CONFIG_DIR/<sicherer Dateiname>. `secure_filename` entfernt Pfad-Anteile
     (kein Traversal). None, wenn der Name leer/ungueltig wird."""
@@ -803,6 +879,13 @@ def admin():
         edit_service = cfg["services"][int(edit_idx)]
     states, stats_error = _service_states(cfg)
     status_by_index = {st["index"]: st for st in states}
+    # E3: TCP-Streams (Bearbeiten per ?edit_tcp=N, Status, zu publishende Ports).
+    edit_tcp = request.args.get("edit_tcp")
+    edit_stream = None
+    if edit_tcp is not None and edit_tcp.isdigit() and int(edit_tcp) < len(cfg["tcp_streams"]):
+        edit_stream = cfg["tcp_streams"][int(edit_tcp)]
+    stream_status = _stream_states(cfg)
+    tcp_ports = [p for _sid, _st, p, _sv in _tcp_streams(cfg)]
     update_info = updater.check(force=False)
     update_info["previous"] = updater.previous_version()   # live, nicht gecacht
     if update_info.get("error"):   # Updater liefert Keys -> hier uebersetzen
@@ -822,6 +905,11 @@ def admin():
         update=update_info,
         update_audit=updater.read_audit(40),
         cert_list=certs.list_certs(),
+        tcp_streams=cfg["tcp_streams"],
+        stream_status=stream_status,
+        edit_stream=edit_stream,
+        edit_tcp_idx=edit_tcp if edit_stream else None,
+        tcp_ports=tcp_ports,
     )
 
 
@@ -1028,6 +1116,51 @@ def admin_service_delete():
         flash(_t()("flash.svc_deleted", name=removed.get("name")), "ok")
         _log.info("Service geloescht: %s", removed.get("name"))
     return redirect(url_for("admin"))
+
+
+@app.route("/admin/tcp", methods=["POST"])
+@requires_auth
+def admin_tcp():
+    cfg = load_config()
+    t = i18n.translator(cfg.get("language", DEFAULT_LANG))
+    st = _stream_from_form(request.form)
+    errors = validate_stream(st)
+    if errors:
+        for e in errors:
+            flash(t(e), "error")
+        return redirect(url_for("admin") + "#tcp")
+    idx = request.form.get("index", "")
+    editing = idx.isdigit() and int(idx) < len(cfg["tcp_streams"])
+    # Port-Kollision mit einem ANDEREN Stream verhindern (Renderer wuerde ihn
+    # sonst stillschweigend verwerfen).
+    port = _valid_port(st.get("port"))
+    for i, other in enumerate(cfg["tcp_streams"]):
+        if (not editing or i != int(idx)) and _valid_port(other.get("port")) == port:
+            flash(t("flash.tcp_port_taken", port=port), "error")
+            return redirect(url_for("admin") + "#tcp")
+    if editing:
+        cfg["tcp_streams"][int(idx)] = st
+        flash(t("flash.tcp_updated", name=st["name"]), "ok")
+        _log.info("TCP-Stream aktualisiert: %s (:%s)", st["name"], port)
+    else:
+        cfg["tcp_streams"].append(st)
+        flash(t("flash.tcp_added", name=st["name"]), "ok")
+        _log.info("TCP-Stream hinzugefuegt: %s (:%s)", st["name"], port)
+    save_config(cfg)
+    return redirect(url_for("admin") + "#tcp")
+
+
+@app.route("/admin/tcp/delete", methods=["POST"])
+@requires_auth
+def admin_tcp_delete():
+    cfg = load_config()
+    idx = request.form.get("index", "")
+    if idx.isdigit() and int(idx) < len(cfg["tcp_streams"]):
+        removed = cfg["tcp_streams"].pop(int(idx))
+        save_config(cfg)
+        flash(_t()("flash.tcp_deleted", name=removed.get("name")), "ok")
+        _log.info("TCP-Stream geloescht: %s", removed.get("name"))
+    return redirect(url_for("admin") + "#tcp")
 
 
 @app.route("/admin/theme", methods=["POST"])

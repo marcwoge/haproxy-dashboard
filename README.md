@@ -192,6 +192,24 @@ Im Service-Formular unter **„Erweitert (optional)"** (bzw. direkt in `services
 Die Aufbewahrung des Datei-Logs ist über `LOG_ROTATE_AT`/`LOG_KEEP_LINES` steuerbar.
 Alle drei Werte stehen in der `.env` – siehe [Abschnitt 5](#5-status-health--logs-admin-gui).
 
+### TCP-Streams (Nicht-HTTP-Dienste)
+
+Für Dienste, die kein HTTP sprechen (Datenbank, SSH, SMTP, …), gibt es im Admin-GUI
+die Karte **„TCP-Streams"**. Ein Stream hört auf einem **eigenen Port** und leitet
+reines TCP (`mode tcp`) an ein oder mehrere Ziele weiter:
+
+- **Eigener Listen-Port** (1–65535, nicht 80/443/8404) — pro Stream eindeutig.
+- **Mehrere Ziele + Lastverteilung** — ein `host:port` oder mehrere (eine pro Zeile);
+  ab zwei Zielen wird lastverteilt (`leastconn` Standard, oder `roundrobin`).
+- **Optionale TLS-Terminierung** mit dem **Plattform-Zertifikat** — HAProxy entschlüsselt,
+  das Backend bekommt Klartext-TCP.
+- **Timeouts** (Client/Server, Default `1h`) und **`clitcpka`** (TCP-Keepalive zum Client).
+
+> **Wichtig:** Jeder Stream-Port muss zusätzlich in `docker-compose.yml` beim Dienst
+> `haproxy` **veröffentlicht** werden (`- "5432:5432"`), danach `docker compose up -d`.
+> HAProxy bindet den Port sonst nur containerintern — das Admin-GUI zeigt die exakten
+> Zeilen an.
+
 ### Automatisch anbinden: Platform-Connector (Sidecar)
 
 Statt den Service manuell im Admin-GUI anzulegen, kannst du einen kleinen
