@@ -48,3 +48,19 @@ den Wert eines optionalen Health-Check-Headers (`header_file`, z. B. ein
 - **`data/haproxy/haproxy.cfg` gehört nicht unverschlüsselt in Backups oder in
   Support-Anfragen.** Wer Zugriff auf den Datenordner auf dem Host hat, kann die
   dort enthaltenen Geheimnisse lesen.
+
+## Interne CA (opt-in, Profil `ca`)
+
+Wird die interne Zertifizierungsstelle (step-ca) genutzt, ist sie ein
+**Vertrauensanker**: Zertifikate aus dieser CA werden von HAProxy für
+Backend-Verbindungen akzeptiert.
+
+- Die CA-**Private-Keys** liegen verschlüsselt unter `data/step-ca/secrets/`
+  (nur auf dem Host, `data/` ist git-ignored) und werden **nicht** in den
+  haproxy-Container gemountet – HAProxy bekommt nur die öffentlichen Certs.
+- `STEPCA_PASSWORD` schützt diese Keys; geheim halten, nicht in Backups/Support.
+- Leaf-Zertifikate sind **kurzlebig** (≈24 h) → keine CRL/OCSP nötig.
+- Ein Backend darf nur ein Zertifikat für **seinen eigenen** Namen erhalten
+  (ACME-Validierung gegen den Backend-Namen); so kann ein kompromittiertes
+  Backend kein anderes imitieren. Siehe [`ca/README.md`](ca/README.md) und
+  [`cert-agent/README.md`](cert-agent/README.md).

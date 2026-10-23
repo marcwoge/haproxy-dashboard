@@ -66,6 +66,37 @@ server <name>:<port> ssl verify required ca-file /certs-ca/root_ca.crt \
 A certificate from any other CA is rejected (the backend goes DOWN), so the
 verification is real, not cosmetic.
 
+## Reaching the CA from other hosts
+
+Backends on other hosts need to reach step-ca's ACME endpoint. step-ca speaks TLS
+with its own certificate, so expose it with **TLS passthrough** — don't terminate
+it at HAProxy. Use a TCP stream (admin GUI → "TCP streams", the v1.5 feature):
+
+- **TCP stream** `ca`: port `9000`, target `step-ca:9000`, **TLS off** (passthrough,
+  so step-ca keeps its own cert end to end).
+- Publish the port in `docker-compose.override.yml` (the GUI shows the line):
+
+  ```yaml
+  services:
+    haproxy:
+      ports:
+        - "9000:9000"
+  ```
+
+- Set `CA_DNS_NAMES` (in `.env`, before first CA init) to include the name the
+  backends use to reach the platform, e.g. `step-ca,localhost,ca.example.local`,
+  so step-ca's certificate is valid for that name.
+
+Backends then point the agent at
+`ACME_DIRECTORY=https://ca.example.local:9000/acme/acme/directory` and trust the
+internal root via `CA_BUNDLE` (see [`../cert-agent/README.md`](../cert-agent/README.md)).
+
+The ACME **HTTP-01 challenge** runs the other way: step-ca connects back to the
+backend on `:80` under its name, so that name must resolve and be reachable from
+the platform host (routable network / VPN). If inbound `:80` to backends is not
+possible, switch the provisioner to DNS-01 or use the token-based (JWK) flow
+instead — see the step-ca docs.
+
 ## Security notes
 
 - Keep `STEPCA_PASSWORD` secret; it encrypts the CA keys.
