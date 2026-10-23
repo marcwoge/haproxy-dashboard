@@ -15,8 +15,12 @@ DYN="/etc/haproxy/dynamic"
 CFG="$DYN/haproxy.cfg"
 LOG="$DYN/haproxy.log"
 STATUS="$DYN/status.txt"
-ROTATE_AT=5000   # Zeilen: ab hier Logdatei kuerzen
-KEEP_LINES=600   # auf so viele Zeilen kuerzen
+# E6: Log-Aufbewahrung konfigurierbar (laengere Historie via docker-compose env).
+ROTATE_AT="${LOG_ROTATE_AT:-5000}"   # Zeilen: ab hier Logdatei kuerzen
+KEEP_LINES="${LOG_KEEP_LINES:-600}"  # auf so viele Zeilen kuerzen
+# Nur positive Ganzzahlen akzeptieren, sonst auf die Defaults zurueckfallen.
+case "$ROTATE_AT" in ''|*[!0-9]*) ROTATE_AT=5000 ;; esac
+case "$KEEP_LINES" in ''|*[!0-9]*) KEEP_LINES=600 ;; esac
 
 mkdir -p /usr/local/etc/haproxy "$DYN"
 : >> "$LOG"

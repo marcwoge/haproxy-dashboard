@@ -165,6 +165,33 @@ ergänzen (siehe oben). Danach als Backend `<container-name>:<port>` eintragen.
 - **an**: HAProxy schneidet `/abfallmanager` ab, das Backend sieht `/...`.
   Richtig für Apps, die unbedingt auf `/` erwarten.
 
+### Erweiterte Routing-Optionen (pro Dienst)
+
+Im Service-Formular unter **„Erweitert (optional)"** (bzw. direkt in `services.yaml`):
+
+- **Mehrere Server & Lastverteilung** – statt eines einzelnen Backends mehrere
+  Adressen (eine pro Zeile, `host:port`) eintragen. Ab zwei Servern wird
+  lastverteilt; Verfahren wählbar (`roundrobin` Standard, oder `leastconn`).
+  In der Dienst-Tabelle zeigt ein Badge `k/n` die gesunden Server an.
+- **Pfad-Match** – `Exakt` (Standard: `/pfad` und `/pfad/…`) oder `Präfix`
+  (`path_beg /pfad`, matcht z. B. auch `/pfadewas` – praktisch für Apps wie NiFi,
+  die auf `/nifi` ohne abschließenden `/` reagieren).
+- **Zusätzliche Pfade** – weitere Pfade (eine pro Zeile), die auf **dasselbe**
+  Backend zeigen, ohne je eine eigene Kachel zu bekommen.
+- **Health-Check-Header aus Secret-Datei** – soll der HTTP-Health-Check einen
+  Header (z. B. `Authorization`) senden, wird nur der **Header-Name** in der
+  Konfiguration hinterlegt; der **Wert** liegt als Datei unter
+  `data/config/secrets/<datei>` und wird erst beim Generieren der Config gelesen –
+  nie in `services.yaml` gespeichert.
+- **Kachel ausblenden** – die Route bleibt aktiv, es erscheint aber keine Kachel
+  auf dem Dashboard (`hidden`). Für Alias-Domains lässt sich zudem das Ziel von
+  „/" getrennt vom Pfad-Erhalt setzen (`root_to`, siehe Domain-Aliase oben).
+
+**Logging (E6):** zusätzlich zum Datei-Log im Container kann HAProxy an ein
+**Syslog**-Ziel schreiben (`SYSLOG_ADDRESS`, z. B. `10.0.0.5:514` oder `/dev/log`).
+Die Aufbewahrung des Datei-Logs ist über `LOG_ROTATE_AT`/`LOG_KEEP_LINES` steuerbar.
+Alle drei Werte stehen in der `.env` – siehe [Abschnitt 5](#5-status-health--logs-admin-gui).
+
 ### Automatisch anbinden: Platform-Connector (Sidecar)
 
 Statt den Service manuell im Admin-GUI anzulegen, kannst du einen kleinen

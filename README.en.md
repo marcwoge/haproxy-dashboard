@@ -162,6 +162,32 @@ or permanently add the external `acme-platform` network to its `docker-compose.y
 - **on**: HAProxy cuts off `/abfallmanager`, the backend sees `/...`.
   Correct for apps that insist on running at `/`.
 
+### Advanced routing options (per service)
+
+In the service form under **"Advanced (optional)"** (or directly in `services.yaml`):
+
+- **Multiple servers & load balancing** – instead of a single backend, enter
+  several addresses (one per line, `host:port`). From two servers on, traffic is
+  balanced; the algorithm is selectable (`roundrobin` default, or `leastconn`).
+  The service table shows a `k/n` badge for the healthy servers.
+- **Path match** – `Exact` (default: `/path` and `/path/…`) or `Prefix`
+  (`path_beg /path`, also matches e.g. `/pathsomething` – handy for apps like NiFi
+  that respond on `/nifi` without a trailing `/`).
+- **Additional paths** – extra paths (one per line) routed to the **same** backend,
+  without ever getting their own tile.
+- **Health-check header from a secret file** – if the HTTP health check should send
+  a header (e.g. `Authorization`), only the **header name** is stored in the config;
+  the **value** lives as a file under `data/config/secrets/<file>` and is read only
+  when the config is generated – never stored in `services.yaml`.
+- **Hide the tile** – the route stays active but no tile appears on the dashboard
+  (`hidden`). For alias domains you can also set the target of "/" independently of
+  path preservation (`root_to`, see domain aliases above).
+
+**Logging (E6):** in addition to the in-container file log, HAProxy can write to a
+**syslog** target (`SYSLOG_ADDRESS`, e.g. `10.0.0.5:514` or `/dev/log`). The file
+log's retention is tunable via `LOG_ROTATE_AT`/`LOG_KEEP_LINES`. All three live in
+`.env` – see [section 5](#5-status-health--logs-admin-gui).
+
 ### Onboard automatically: the Platform Connector (sidecar)
 
 Instead of adding the service manually in the admin GUI, you can drop a small
