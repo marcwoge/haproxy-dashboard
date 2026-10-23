@@ -69,6 +69,9 @@ services:
     # extra_paths: [/api, /static]    # additional paths, no separate dashboard tile
     # E5 - keep the route but hide the dashboard tile:
     # hidden: false
+    # #19 - external link tile instead of a route (opens in a new tab, no HAProxy
+    # route; path/backend are ignored). Optional health check via "healthcheck".
+    # link_url: "https://portal.example.com/"
     # healthcheck:                    # HTTP health check instead of a plain TCP check
     #   uri: /health                  #   default: the service path
     #   expect_status: "200|301|302"  #   default: any 2xx/3xx

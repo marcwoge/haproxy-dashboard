@@ -194,6 +194,29 @@ Im Service-Formular unter **„Erweitert (optional)"** (bzw. direkt in `services
 Die Aufbewahrung des Datei-Logs ist über `LOG_ROTATE_AT`/`LOG_KEEP_LINES` steuerbar.
 Alle drei Werte stehen in der `.env` – siehe [Abschnitt 5](#5-status-health--logs-admin-gui).
 
+### Externe Links als Kachel
+
+Für Dienste außerhalb der Plattform (SaaS, Portale im Internet, andere Standorte)
+im Service-Formular **„Externer Link“** setzen, z. B. `https://portal.example.com/`.
+Die Kachel öffnet die URL dann in einem neuen Tab; HAProxy legt dafür **keine Route**
+an. Pfad, Backend und Routing-Optionen werden ignoriert.
+
+Ein externer Dienst lässt sich in der Regel **nicht** sinnvoll unter einem Plattform-Pfad
+durchreichen (fremder Host-Header, absolute Pfade, Cookies) – dafür ist die Link-Kachel da.
+
+**Optionaler Health-Check:** Ist „HTTP-Health-Check“ aktiviert, prüft HAProxy die
+Erreichbarkeit über ein reines Prüf-Backend (ohne Route) mit Host-Header und SNI des
+Ziels. Die Kachel zeigt dann UP/DOWN, und „Backend DOWN“-Benachrichtigungen greifen.
+URI-Default ist der Pfad des Links, Intervall-Default 30 s. Ohne Health-Check bleibt
+der Punkt grau.
+
+```yaml
+- name: "Ticket-Portal"
+  link_url: "https://portal.example.com/login"
+  icon: "🎫"
+  healthcheck: {uri: /health, expect_status: "200|302", interval: 60s}   # optional
+```
+
 ### TCP-Streams (Nicht-HTTP-Dienste)
 
 Für Dienste, die kein HTTP sprechen (Datenbank, SSH, SMTP, …), gibt es im Admin-GUI

@@ -107,6 +107,9 @@
   "svc.hc_header_file": "…-Wert aus Secret-Datei unter data/config/secrets/",
   "svc.hc_header_hint": "Der Header-Wert wird aus der Secret-Datei gelesen und nie in services.yaml gespeichert.",
   "svc.servers_up": "{up}/{total} Server up",
+  "svc.f_link_url": "Externer Link (optional)",
+  "svc.f_link_url_hint": "Statt einer Route: die Kachel öffnet diese URL in einem neuen Tab (http/https). Pfad, Backend und Routing-Optionen werden dann ignoriert. Mit aktiviertem Health-Check wird die Erreichbarkeit geprüft (Host-Header und SNI des Ziels); URI-Default ist der Pfad des Links.",
+  "svc.link_badge": "Externer Link",
 
   "theme.heading": "Erscheinungsbild & Domain",
   "theme.domain": "Domain",
@@ -193,7 +196,7 @@
   "logs.reload": "Neu laden",
 
   "flash.admin_locked": "Admin-GUI ist deaktiviert: bitte ADMIN_PASSWORD in .env setzen und neu starten.",
-  "flash.name_path_required": "Name und Pfad sind Pflichtfelder.",
+  "flash.name_path_required": "Name und Pfad (oder ein externer Link) sind Pflichtfelder; „/“ ist dem Dashboard vorbehalten.",
   "flash.svc_added": "Service „{name}“ hinzugefügt.",
   "flash.svc_updated": "Service „{name}“ aktualisiert.",
   "flash.svc_deleted": "Service „{name}“ gelöscht.",
@@ -217,6 +220,7 @@
   "flash.rollback_requested": "Rollback auf {target} angefordert – der host-seitige Updater prüft Signatur, lädt die Images und startet mit Healthcheck neu …",
   "flash.field_invalid_name": "Name fehlt oder enthält unzulässige Steuerzeichen.",
   "flash.field_invalid_path": "Pfad ungültig: erlaubt sind /, Buchstaben, Ziffern, . _ - (keine Leer-/Sonderzeichen).",
+  "flash.field_invalid_link": "Externer Link ungültig: erwartet http(s)://host[:port][/pfad] ohne Leerzeichen, Anführungszeichen oder spitze Klammern.",
   "flash.field_invalid_backend": "Backend ungültig: nur host/container[:port] bzw. ip[:port] erlaubt.",
   "flash.field_invalid_scheme": "Schema muss http oder https sein.",
   "flash.field_invalid_color": "Farbe ungültig: Hex (z. B. #22c55e) oder einfacher Farbname.",

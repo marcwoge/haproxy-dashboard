@@ -29,7 +29,7 @@ from waitress import serve
 
 from haproxy_render import (render as render_haproxy, _norm_path, _safe_id,
                             _valid_timeout, _service_servers, _valid_port,
-                            _tcp_streams, HC_SECRET_DIR)
+                            _tcp_streams, HC_SECRET_DIR, parse_link_url, is_link)
 import updater
 import notifier
 import i18n
@@ -469,6 +469,14 @@ def _service_states(cfg: dict):
         st = bk.get(name)
         if not s.get("enabled", True):
             status = "disabled"
+        elif is_link(s):
+            # #19: Link-Kachel - Status nur mit Health-Check (reines Pruef-Backend).
+            if not s.get("healthcheck") or not parse_link_url(s.get("link_url")):
+                status = "none"
+            elif stats_error is not None or st is None:
+                status = "unknown"
+            else:
+                status = st.get("status", "")
         elif not _service_servers(s) or _norm_path(s.get("path", "/")) == "/":
             status = "none"
         elif stats_error is not None or st is None:
@@ -487,7 +495,7 @@ def _service_states(cfg: dict):
             "dot": _dot_class(status),
             "check": (st or {}).get("check", ""),
             "servers": servers,
-            "n_servers": len(_service_servers(s)),
+            "n_servers": 0 if is_link(s) else len(_service_servers(s)),
         })
     return states, stats_error
 
@@ -636,7 +644,11 @@ def _service_from_form(form) -> dict:
         "match": (form.get("match", "exact").strip().lower() or "exact"),
         "extra_paths": _parse_list(form.get("extra_paths", "")),
         "hidden": form.get("hidden") == "on",
+        # #19 externe Link-Kachel (URL statt Route)
+        "link_url": form.get("link_url", "").strip(),
     }
+    if not svc["link_url"]:
+        del svc["link_url"]
     # E1 mehrere Server + Lastverteilung (optional; sonst das einzelne backend-Feld)
     servers = _parse_servers(form.get("servers", ""))
     if servers:
@@ -776,6 +788,9 @@ def validate_service(svc: dict) -> list:
             break
     if svc.get("balance") and svc["balance"] not in ("roundrobin", "leastconn"):
         errors.append("flash.field_invalid_balance")
+    # #19 externe Link-Kachel: strikte URL (http/https, Host, optional Port/Pfad)
+    if "link_url" in svc and not parse_link_url(svc["link_url"]):
+        errors.append("flash.field_invalid_link")
     # E2 Match-Art + zusaetzliche Pfade
     if svc.get("match") and svc["match"] not in ("exact", "prefix"):
         errors.append("flash.field_invalid_match")
@@ -859,6 +874,12 @@ def _dashboard_services(cfg: dict):
         item = dict(s)
         st = status_by_index.get(idx)
         item["dot"] = st["dot"] if st else None
+        # #19: Schluessel fuer das Live-Update (Link-Kacheln haben keinen Pfad).
+        parsed = parse_link_url(s.get("link_url")) if is_link(s) else None
+        if is_link(s) and not parsed:
+            continue   # ungueltiger Link (Hand-Edit) -> keine Kachel
+        item["key"] = f"#link-{idx}" if parsed else s.get("path")
+        item["link_host"] = parsed[1] if parsed else None
         services.append(item)
     return services, show_status
 
@@ -879,7 +900,7 @@ def public_status():
     if not cfg["theme"].get("show_status", True):
         abort(404)
     services, _ = _dashboard_services(cfg)
-    return {"services": [{"path": s.get("path"), "dot": s.get("dot") or "unknown"}
+    return {"services": [{"path": s.get("key"), "dot": s.get("dot") or "unknown"}
                          for s in services]}
 
 
@@ -1111,7 +1132,8 @@ def admin_service():
     cfg = load_config()
     t = i18n.translator(cfg.get("language", DEFAULT_LANG))
     svc = _service_from_form(request.form)
-    if not svc["name"] or not svc["path"]:
+    # #19: Link-Kacheln brauchen keinen Pfad; Routen einen anderen als "/".
+    if not svc["name"] or (not is_link(svc) and svc["path"] == "/"):
         flash(t("flash.name_path_required"), "error")
         return redirect(url_for("admin"))
 
@@ -1124,7 +1146,7 @@ def admin_service():
         return redirect(url_for("admin"))
 
     # M6: Hinweis, wenn https-Backend OHNE Zertifikatspruefung gespeichert wird.
-    if svc["scheme"] == "https" and not svc["ssl_verify"]:
+    if svc["scheme"] == "https" and not svc["ssl_verify"] and not is_link(svc):
         flash(t("flash.ssl_none_warn", name=svc["name"]), "error")
         _log.warning("Service %s: https mit verify none", svc["name"])
 
@@ -1132,11 +1154,11 @@ def admin_service():
     if idx.isdigit() and int(idx) < len(cfg["services"]):
         cfg["services"][int(idx)] = svc
         flash(t("flash.svc_updated", name=svc["name"]), "ok")
-        _log.info("Service aktualisiert: %s (%s -> %s)", svc["name"], svc["path"], svc["backend"])
+        _log.info("Service aktualisiert: %s (%s -> %s)", svc["name"], svc["path"], svc.get("link_url") or svc["backend"])
     else:
         cfg["services"].append(svc)
         flash(t("flash.svc_added", name=svc["name"]), "ok")
-        _log.info("Service hinzugefuegt: %s (%s -> %s)", svc["name"], svc["path"], svc["backend"])
+        _log.info("Service hinzugefuegt: %s (%s -> %s)", svc["name"], svc["path"], svc.get("link_url") or svc["backend"])
     save_config(cfg)
     return redirect(url_for("admin"))
 

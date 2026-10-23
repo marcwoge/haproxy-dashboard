@@ -190,6 +190,28 @@ In the service form under **"Advanced (optional)"** (or directly in `services.ya
 log's retention is tunable via `LOG_ROTATE_AT`/`LOG_KEEP_LINES`. All three live in
 `.env` – see [section 5](#5-status-health--logs-admin-gui).
 
+### External links as tiles
+
+For services outside the platform (SaaS, portals on the internet, other sites), set
+**“External link”** in the service form, e.g. `https://portal.example.com/`. The tile
+then opens the URL in a new tab; HAProxy creates **no route** for it. Path, backend and
+routing options are ignored.
+
+An external service usually can **not** be proxied sensibly under a platform path
+(foreign Host header, absolute paths, cookies) – that is what link tiles are for.
+
+**Optional health check:** with “HTTP health check” enabled, HAProxy checks reachability
+through a check-only backend (no route) using the target's Host header and SNI. The tile
+then shows UP/DOWN and “Backend DOWN” notifications apply. The URI defaults to the
+link's path, the interval to 30 s. Without a health check the dot stays grey.
+
+```yaml
+- name: "Ticket portal"
+  link_url: "https://portal.example.com/login"
+  icon: "🎫"
+  healthcheck: {uri: /health, expect_status: "200|302", interval: 60s}   # optional
+```
+
 ### TCP streams (non-HTTP services)
 
 For services that don't speak HTTP (database, SSH, SMTP, …) the admin GUI has a

@@ -103,9 +103,9 @@
                     id="st-{{ loop.index0 }}"
                     title="{{ st.status if st else '' }}{% if st and st.check %} ({{ st.check }}){% endif %}"></span></td>
           <td>{{ s.name }}{% if s.source == 'connector' %} <span class="src-badge" title="{{ t('svc.via_connector') }}">⇄</span>{% endif %}{% if s.deny_paths %} <span class="src-badge" title="{{ t('svc.locked') }}">🔒</span>{% endif %}</td>
-          <td><code>{{ s.path }}</code>{% if s.hidden %} <span class="src-badge" title="{{ t('svc.f_hidden') }}">🙈</span>{% endif %}</td>
+          <td>{% if s.link_url %}<span class="src-badge" title="{{ t('svc.link_badge') }}">↗</span>{% else %}<code>{{ s.path }}</code>{% endif %}{% if s.hidden %} <span class="src-badge" title="{{ t('svc.f_hidden') }}">🙈</span>{% endif %}</td>
           <td>
-            <code>{{ s.backend or (s.servers[0] if s.servers else '') }}</code>
+            <code>{{ s.link_url or s.backend or (s.servers[0] if s.servers else '') }}</code>
             {% if st and st.n_servers > 1 %}
               {% set up = st.servers | selectattr('dot', 'equalto', 'up') | list | length %}
               <span class="src-badge" title="{{ t('svc.servers_up', up=up, total=st.n_servers) }}">{{ up }}/{{ st.n_servers }}</span>
@@ -144,8 +144,12 @@
         <input name="name" required value="{{ e.name or '' }}" placeholder="Example Service">
       </label>
       <label>{{ t('svc.f_path') }}
-        <input name="path" required value="{{ e.path or '' }}" placeholder="/abfallmanager">
+        <input name="path" value="{{ '' if e.link_url else (e.path or '') }}" placeholder="/abfallmanager">
       </label>
+      <label class="full">{{ t('svc.f_link_url') }}
+        <input name="link_url" type="url" value="{{ e.link_url or '' }}" placeholder="https://portal.example.com/">
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('svc.f_link_url_hint') }}</p>
       <label>{{ t('svc.f_backend') }}
         <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
       </label>

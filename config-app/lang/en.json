@@ -107,6 +107,9 @@
   "svc.hc_header_file": "…value from a secret file under data/config/secrets/",
   "svc.hc_header_hint": "The header value is read from the secret file and never stored in services.yaml.",
   "svc.servers_up": "{up}/{total} servers up",
+  "svc.f_link_url": "External link (optional)",
+  "svc.f_link_url_hint": "Instead of a route: the tile opens this URL in a new tab (http/https). Path, backend and routing options are ignored then. With the health check enabled, reachability is checked (target Host header and SNI); the URI defaults to the link's path.",
+  "svc.link_badge": "External link",
 
   "theme.heading": "Appearance & domain",
   "theme.domain": "Domain",
@@ -193,7 +196,7 @@
   "logs.reload": "Reload",
 
   "flash.admin_locked": "Admin GUI is disabled: please set ADMIN_PASSWORD in .env and restart.",
-  "flash.name_path_required": "Name and path are required.",
+  "flash.name_path_required": "Name and path (or an external link) are required; \"/\" is reserved for the dashboard.",
   "flash.svc_added": "Service “{name}” added.",
   "flash.svc_updated": "Service “{name}” updated.",
   "flash.svc_deleted": "Service “{name}” deleted.",
@@ -217,6 +220,7 @@
   "flash.rollback_requested": "Rollback to {target} requested – the host-side updater verifies the signature, pulls the images and restarts with healthcheck …",
   "flash.field_invalid_name": "Name missing or contains invalid control characters.",
   "flash.field_invalid_path": "Invalid path: allowed are /, letters, digits, . _ - (no spaces/special characters).",
+  "flash.field_invalid_link": "Invalid external link: expected http(s)://host[:port][/path] without spaces, quotes or angle brackets.",
   "flash.field_invalid_backend": "Invalid backend: only host/container[:port] or ip[:port] allowed.",
   "flash.field_invalid_scheme": "Scheme must be http or https.",
   "flash.field_invalid_color": "Invalid color: hex (e.g. #22c55e) or a simple color name.",

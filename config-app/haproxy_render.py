@@ -220,6 +220,36 @@ def _hc_header(hc) -> str:
     return f' hdr {name} "{val}"'
 
 
+# #19: externe Link-Kachel. Streng: Schema http/https, Host wie _SAFE_HOST, optionaler
+# Port, Rest nur aus unbedenklichen URL-Zeichen (kein Whitespace, keine Quotes, kein
+# <>, kein Backslash) -> weder HTML- noch HAProxy-Config-Injection moeglich.
+_RE_LINK_URL = re.compile(
+    r"^(https?)://([A-Za-z0-9.-]{1,253})(?::([0-9]{1,5}))?"
+    r"((?:[/?#][A-Za-z0-9._~!$&'()*+,;=:@%/?#-]*)?)$")
+
+
+def parse_link_url(url):
+    """#19: (scheme, host, port, path) einer gueltigen link_url, sonst None.
+    port: aus der URL oder Default 443/80; path: nur der Pfadteil (ohne ?/#)."""
+    u = str(url or "").strip()
+    m = _RE_LINK_URL.match(u) if len(u) <= 2048 else None
+    if not m:
+        return None
+    scheme, host, port, rest = m.group(1).lower(), m.group(2).lower(), m.group(3), m.group(4)
+    if host.startswith(".") or host.endswith(".") or ".." in host:
+        return None
+    port = int(port) if port else (443 if scheme == "https" else 80)
+    if not 1 <= port <= 65535:
+        return None
+    path = re.split(r"[?#]", rest or "/", maxsplit=1)[0] or "/"
+    return scheme, host, port, path
+
+
+def is_link(s) -> bool:
+    """#19: Service ist eine externe Link-Kachel (keine Route)."""
+    return bool(str(s.get("link_url") or "").strip())
+
+
 def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     all_services = config.get("services", [])
     domain = str(config.get("domain", "")).strip()
@@ -335,6 +365,8 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
     for idx, s in enumerate(all_services):
         if not s.get("enabled", True):
             continue
+        if is_link(s):
+            continue   # #19: externe Link-Kachel -> keine Route
         servers = _service_servers(s)      # E1: ein oder mehrere Backends
         if not servers:
             continue
@@ -429,6 +461,48 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
                     srv += " verify none"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)
             A(srv)
+        A("")
+
+    # #19: Link-Kacheln mit Health-Check -> reines Pruef-Backend (kein use_backend).
+    # Host-Header und SNI = Ziel-Host, damit virtuell gehostete Dienste antworten.
+    for idx, s in enumerate(all_services):
+        hc = s.get("healthcheck") or {}
+        if not s.get("enabled", True) or not is_link(s) or not hc:
+            continue
+        parsed = parse_link_url(s.get("link_url"))
+        if not parsed:
+            A(f"# uebersprungen (ungueltiger Link): {_clean_comment(s.get('name', ''))}")
+            A("")
+            continue
+        scheme, host, port, lpath = parsed
+        sid = _safe_id(s.get("name", "svc"), idx)
+        uri = _norm_path(str(hc.get("uri") or lpath))
+        if not _SAFE_PATH.match(uri) or ".." in uri:
+            uri = "/"
+        interval = str(hc.get("interval") or "").strip().lower()
+        inter = interval if _valid_timeout(interval) else "30s"   # extern: schonend pruefen
+        A(f"# Link-Kachel (nur Health-Check): {_clean_comment(s.get('name', sid))}")
+        A(f"backend bk_{sid}")
+        A("    option httpchk")
+        default_port = 443 if scheme == "https" else 80
+        host_hdr = host if port == default_port else f"{host}:{port}"
+        A(f"    http-check send meth GET uri {uri} ver HTTP/1.1 hdr Host {host_hdr}" + _hc_header(hc))
+        expect = str(hc.get("expect_status") or "").strip()
+        if _RE_EXPECT.match(expect):
+            A(f"    http-check expect rstatus ^({expect})$")
+        else:
+            A("    http-check expect rstatus ^([23][0-9][0-9])$")
+        addr = f"{host}:{port}"
+        srv = f"    server s_{sid}_0 {addr}"
+        if scheme == "https":
+            srv += " ssl"
+            if s.get("ssl_verify", True):
+                srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
+            else:
+                srv += " verify none"
+            srv += f" sni str({host}) check-sni {host}"
+        srv += " " + _server_opts(addr, inter=inter, extra="fall 3 rise 2")
+        A(srv)
         A("")
 
     # E3: TCP-Streams - eigene Ports, mode tcp, optional TLS-Terminierung mit dem
