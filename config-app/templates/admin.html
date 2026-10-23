@@ -408,7 +408,8 @@
 
     {% if tcp_ports %}
     <p class="upd-hint" style="margin-top:.6rem;">{{ t('tcp.compose_hint') }}</p>
-    <pre class="cmdbox">  haproxy:
+    <pre class="cmdbox">services:
+  haproxy:
     ports:{% for p in tcp_ports %}
       - "{{ p }}:{{ p }}"{% endfor %}</pre>
     {% endif %}

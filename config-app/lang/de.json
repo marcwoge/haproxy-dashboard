@@ -149,7 +149,7 @@
   "tcp.col_target": "Ziel",
   "tcp.col_tls": "TLS",
   "tcp.none": "Keine TCP-Streams.",
-  "tcp.compose_hint": "Diese Ports in docker-compose.yml beim Dienst „haproxy“ veröffentlichen und danach „docker compose up -d“ ausführen (HAProxy bindet sie nur containerintern):",
+  "tcp.compose_hint": "Diese Ports in eine docker-compose.override.yml eintragen (Vorlage: docker-compose.override.yml.example) und „docker compose up -d“ ausführen. Die Override-Datei wird automatisch geladen und bleibt bei Updates erhalten – anders als Einträge direkt in docker-compose.yml:",
   "tcp.add_title": "TCP-Stream hinzufügen",
   "tcp.edit_title": "TCP-Stream bearbeiten",
   "tcp.f_name": "Name",

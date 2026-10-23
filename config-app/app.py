@@ -29,7 +29,7 @@ from waitress import serve
 
 from haproxy_render import (render as render_haproxy, _norm_path, _safe_id,
                             _valid_timeout, _service_servers, _valid_port,
-                            _tcp_streams)
+                            _tcp_streams, HC_SECRET_DIR)
 import updater
 import notifier
 import i18n
@@ -223,6 +223,20 @@ _lock = threading.Lock()
 
 # Eigenes Logfile (zusaetzlich zu stdout), damit das Admin-GUI es anzeigen kann.
 HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
+
+# #16: Health-Check-Header-Secrets restriktiv halten. Falls der Secret-Ordner
+# existiert, auf 0700 setzen und enthaltene Dateien auf 0600 (Best-Effort; beide
+# Container laufen als root). Der Ordner wird vom Betreiber befuellt.
+try:
+    _sec = Path(HC_SECRET_DIR)
+    if _sec.is_dir():
+        os.chmod(_sec, 0o700)
+        for _f in _sec.iterdir():
+            if _f.is_file():
+                os.chmod(_f, 0o600)
+except OSError:
+    pass  # Rechte-Haertung ist Best-Effort; Fehler nicht fatal.
+
 _log = logging.getLogger("config-app")
 _log.setLevel(logging.INFO)
 _fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S")
@@ -328,6 +342,14 @@ def regenerate(cfg: dict) -> None:
     tmp = HAPROXY_CFG.with_suffix(".cfg.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
+    # #16: die generierte Config enthaelt Geheimnisse (Health-Check-Header-Werte,
+    # stats auth) im Klartext -> restriktiv (0600) schreiben. Beide Container laufen
+    # als root, der haproxy-Container liest sie also weiterhin. Der chmod VOR dem
+    # atomaren Replace vermeidet ein kurzes Fenster mit 0644.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError as e:
+        _log.warning("chmod haproxy.cfg fehlgeschlagen: %s", e)
     tmp.replace(HAPROXY_CFG)
     _log.info("haproxy.cfg neu generiert (%d Service(s))", len(cfg.get("services", [])))
 

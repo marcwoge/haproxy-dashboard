@@ -203,10 +203,13 @@ For services that don't speak HTTP (database, SSH, SMTP, …) the admin GUI has 
   the backend receives plain TCP.
 - **Timeouts** (client/server, default `1h`) and **`clitcpka`** (TCP keepalive to the client).
 
-> **Important:** each stream port must also be **published** for the `haproxy` service
-> in `docker-compose.yml` (`- "5432:5432"`), followed by `docker compose up -d`.
-> Otherwise HAProxy only binds the port inside the container — the admin GUI shows the
-> exact lines to add.
+> **Important:** each stream port must also be **published** on the `haproxy`
+> container (`- "5432:5432"`), otherwise HAProxy only binds it inside the container.
+> Put the lines in a **`docker-compose.override.yml`** (template:
+> `docker-compose.override.yml.example`) and run `docker compose up -d`. Compose loads
+> the override automatically; it is not in the repo and is left untouched by updates
+> (the host-side updater does not modify it) — unlike entries in `docker-compose.yml`,
+> which an update can overwrite. The admin GUI shows the exact lines to add.
 
 ### Onboard automatically: the Platform Connector (sidecar)
 

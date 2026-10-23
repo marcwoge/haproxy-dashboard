@@ -86,9 +86,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      # E3: TCP streams. Each stream configured in the admin GUI needs its listen
-      # port published here (e.g. - "5432:5432"), then `docker compose up -d`.
-      # The admin GUI shows the exact lines to add.
+      # E3: TCP streams need their listen ports published. Put them in
+      # docker-compose.override.yml (copy docker-compose.override.yml.example) so
+      # they survive updates - NOT here. The admin GUI shows the exact lines.
     volumes:
       # place your .crt + .key here (read-only)
       - ./certs:/certs:ro
