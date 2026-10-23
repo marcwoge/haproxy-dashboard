@@ -319,7 +319,7 @@
     <form method="post" action="{{ url_for('admin_domains') }}" class="form-grid">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="full">{{ t('dc.aliases_label') }}
-        <textarea name="domain_aliases" rows="3" placeholder="wiki.example.local /wiki keep">{% for a in cfg.domain_aliases %}{{ a.host }} {{ a.redirect_to }}{% if a.keep_path %} keep{% endif %}
+        <textarea name="domain_aliases" rows="3" placeholder="wiki.example.local /wiki keep root=/wiki/home">{% for a in cfg.domain_aliases %}{{ a.host }} {{ a.redirect_to }}{% if a.keep_path %} keep{% endif %}{% if a.root_to %} root={{ a.root_to }}{% endif %}
 {% endfor %}</textarea>
       </label>
       <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.aliases_hint') }}</p>

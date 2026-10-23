@@ -126,8 +126,8 @@
 
   "dc.heading": "Domains & certificates",
   "dc.aliases_heading": "Domain aliases (301 redirect)",
-  "dc.aliases_label": "One per line: host /path [keep]",
-  "dc.aliases_hint": "Example: wiki.example.local /wiki keep — 301-redirects the old domain to the platform (path + query preserved). \"keep\" avoids a double prefix. For HTTPS on alias domains, add a matching certificate.",
+  "dc.aliases_label": "One per line: host /path [keep] [root=/path]",
+  "dc.aliases_hint": "Example: wiki.example.local /wiki keep — 301-redirects the old domain to the platform (path + query preserved). \"keep\" avoids a double prefix. \"root=/target\" sets a dedicated target for \"/\" (independent of path preservation). For HTTPS on alias domains, add a matching certificate.",
   "dc.aliases_save": "Save aliases",
   "dc.certs_heading": "Additional certificates (SNI)",
   "dc.certs_intro": "The primary certificate lives in certs/. Upload additional certificates here (e.g. for alias domains) — HAProxy selects by SNI. Private keys are never shown.",
