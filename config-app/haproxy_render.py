@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+from werkzeug.utils import secure_filename
+
 # Gleicher Logger-Name wie in app.py -> Meldungen landen im App-Log (und damit
 # auch in der Log-Anzeige des Admin-GUIs) sowie auf stdout.
 _log = logging.getLogger("config-app")
@@ -111,7 +113,10 @@ def _deny_list(path: str, deny_paths) -> list:
 
 def _alias_lines(aliases, domain: str) -> list:
     """#8: 301-Redirects von Alias-Domains auf die Plattform-Domain (Pfad+Query
-    bleiben via %[url] erhalten). Wird in fe_http UND fe_https eingesetzt."""
+    bleiben via %[pathq] erhalten). Wird in fe_http UND fe_https eingesetzt.
+    %[pathq] statt %[url]: bei HTTP/2 (und absoluter Request-URI) liefert %[url]
+    die komplette URL inkl. Schema/Host -> doppelter/falscher Location-Header;
+    %[pathq] ist immer nur Pfad + Query."""
     out = []
     if not (domain and _SAFE_HOST.match(domain)):
         return out
@@ -129,13 +134,13 @@ def _alias_lines(aliases, domain: str) -> list:
             if _SAFE_PATH.match(rr) and ".." not in rr:
                 out.append(f"    http-request redirect code 301 location https://{domain}{rr} if {acl} {{ path / }}")
         if rt == "/":
-            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}%[pathq] if {acl}")
         elif a.get("keep_path"):
             # Pfad enthaelt das Praefix bereits -> unveraendert; sonst voranstellen.
-            out.append(f"    http-request redirect code 301 location https://{domain}%[url] if {acl} {{ path_beg {rt} }}")
-            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}%[pathq] if {acl} {{ path_beg {rt} }}")
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[pathq] if {acl}")
         else:
-            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[url] if {acl}")
+            out.append(f"    http-request redirect code 301 location https://{domain}{rt}%[pathq] if {acl}")
     return out
 
 
@@ -227,7 +232,9 @@ def _hc_header(hc) -> str:
     """E4: optionaler Health-Check-Header, dessen WERT aus einer Secret-Datei kommt
     (nicht aus services.yaml). Leer, wenn nicht konfiguriert/lesbar/ungueltig."""
     name = str(hc.get("header_name") or "").strip()
-    fname = os.path.basename(str(hc.get("header_file") or "").strip())
+    # secure_filename bereinigt den Dateinamen (von CodeQL als Sanitizer gegen
+    # Path-Injection anerkannt; schneidet Pfadtrenner/"..", keine Traversal).
+    fname = secure_filename(str(hc.get("header_file") or "").strip())
     if not name and not fname:
         return ""   # kein Header konfiguriert -> normal, keine Meldung
     if not _RE_HDRNAME.match(name) or not fname:
@@ -242,9 +249,9 @@ def _hc_header(hc) -> str:
         # root, aber mit cap_drop ALL (kein CAP_DAC_OVERRIDE) -> er kann eine
         # 0600-Datei nur lesen, wenn sie uid 0 gehoert. Sonst faellt der Header
         # still weg und der Health-Check scheitert (z. B. 401 -> 503).
-        _log.warning("Health-Check-Header %r: Secret-Datei %r nicht lesbar (%s) -> "
-                     "Header wird weggelassen. Datei im Container lesbar machen "
-                     "(root:root, 0600) in %s.", name, fname, e, HC_SECRET_DIR)
+        _log.warning("Health-Check-Header %r: Secret-Datei %r im Secret-Verzeichnis "
+                     "nicht lesbar (%s) -> Header wird weggelassen. Datei im Container "
+                     "lesbar machen (root:root, 0600).", name, fname, e)
         return ""
     # Steuerzeichen sowie " und \ wuerden das Quoting sprengen -> abweisen.
     if not val or any(ord(c) < 0x20 or ord(c) == 0x7f for c in val) \
