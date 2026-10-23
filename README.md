@@ -207,10 +207,14 @@ reines TCP (`mode tcp`) an ein oder mehrere Ziele weiter:
   das Backend bekommt Klartext-TCP.
 - **Timeouts** (Client/Server, Default `1h`) und **`clitcpka`** (TCP-Keepalive zum Client).
 
-> **Wichtig:** Jeder Stream-Port muss zusätzlich in `docker-compose.yml` beim Dienst
-> `haproxy` **veröffentlicht** werden (`- "5432:5432"`), danach `docker compose up -d`.
-> HAProxy bindet den Port sonst nur containerintern — das Admin-GUI zeigt die exakten
-> Zeilen an.
+> **Wichtig:** Jeder Stream-Port muss zusätzlich am `haproxy`-Container
+> **veröffentlicht** werden (`- "5432:5432"`), sonst bindet HAProxy ihn nur
+> containerintern. Trage die Zeilen in eine **`docker-compose.override.yml`** ein
+> (Vorlage: `docker-compose.override.yml.example`) und starte mit `docker compose up -d`.
+> Compose lädt die Override-Datei automatisch; sie liegt nicht im Repo und bleibt bei
+> Updates unangetastet (der Host-Updater fasst sie nicht an) — anders als Einträge
+> direkt in `docker-compose.yml`, die bei einem Update verloren gehen können. Das
+> Admin-GUI zeigt die exakten Zeilen an.
 
 ### Automatisch anbinden: Platform-Connector (Sidecar)
 

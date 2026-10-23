@@ -25,3 +25,19 @@ eines Fixes keine Details öffentlich machen.
 - Admin-/Dashboard-Weboberfläche (config-app), Login, RBAC, Connector-API
 - generierte HAProxy-Konfiguration und Zertifikatsbehandlung
 - Host-seitiger Updater (`updater/`) und die veröffentlichten GHCR-Images
+
+## Geheimnisse in der generierten Konfiguration
+
+Die generierte `data/haproxy/haproxy.cfg` enthält **Klartext-Geheimnisse** –
+den Wert eines optionalen Health-Check-Headers (`header_file`, z. B. ein
+`Authorization`-Token) sowie die internen Stats-Zugangsdaten (`stats auth`).
+
+- config-app schreibt die Datei mit `0600`; der Secret-Ordner
+  `data/config/secrets/` wird (sofern vorhanden) auf `0700`, die Dateien darin
+  auf `0600` gesetzt. Beide Container laufen als `root`, der haproxy-Container
+  kann die Config also weiterhin lesen.
+- Der Header-**Wert** wird nie im Admin-GUI, in `status.txt` oder in den Logs
+  angezeigt – nur der Dateiname.
+- **`data/haproxy/haproxy.cfg` gehört nicht unverschlüsselt in Backups oder in
+  Support-Anfragen.** Wer Zugriff auf den Datenordner auf dem Host hat, kann die
+  dort enthaltenen Geheimnisse lesen.

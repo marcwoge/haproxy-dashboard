@@ -1,0 +1,18 @@
+# ============================================================
+#  Local Compose override (E3 / issue #14)
+#  Copy to docker-compose.override.yml and adjust:
+#      cp docker-compose.override.yml.example docker-compose.override.yml
+#
+#  `docker compose` loads docker-compose.override.yml automatically and merges
+#  it on top of docker-compose.yml. Keep your TCP-stream port mappings here, NOT
+#  in docker-compose.yml: this file is git-ignored and is left untouched by the
+#  host-side updater, so your published ports survive every update.
+#
+#  Add one line per TCP stream you created in the admin GUI (host:container,
+#  same number on both sides). The admin GUI shows the exact lines.
+# ============================================================
+services:
+  haproxy:
+    ports:
+      # - "5432:5432"   # e.g. Postgres
+      # - "1883:1883"   # e.g. MQTT

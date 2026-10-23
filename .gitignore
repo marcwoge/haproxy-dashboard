@@ -1,6 +1,10 @@
 # Echte Konfiguration mit Geheimnissen (Template: .env.example)
 .env
 
+# Lokale Compose-Overrides (z. B. TCP-Stream-Ports) - updatefest, nicht im Repo
+# (Template: docker-compose.override.yml.example)
+docker-compose.override.yml
+
 # Docker-secrets (M4) - niemals einchecken
 /secrets/
 
