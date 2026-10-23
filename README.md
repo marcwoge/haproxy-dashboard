@@ -184,7 +184,10 @@ Im Service-Formular unter **„Erweitert (optional)"** (bzw. direkt in `services
   Header (z. B. `Authorization`) senden, wird nur der **Header-Name** in der
   Konfiguration hinterlegt; der **Wert** liegt als Datei unter
   `data/config/secrets/<datei>` und wird erst beim Generieren der Config gelesen –
-  nie in `services.yaml` gespeichert.
+  nie in `services.yaml` gespeichert. Die Datei muss **`root` gehören** (die
+  Container laufen als root, aber mit `cap_drop: ALL`, also ohne das Recht, fremde
+  Dateien zu lesen): `sudo install -o root -g root -m600 token data/config/secrets/`.
+  Ist sie unlesbar, wird der Header mit einer Warnung im Log weggelassen.
 - **Kachel ausblenden** – die Route bleibt aktiv, es erscheint aber keine Kachel
   auf dem Dashboard (`hidden`). Für Alias-Domains lässt sich zudem das Ziel von
   „/" getrennt vom Pfad-Erhalt setzen (`root_to`, siehe Domain-Aliase oben).

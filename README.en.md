@@ -180,7 +180,11 @@ In the service form under **"Advanced (optional)"** (or directly in `services.ya
 - **Health-check header from a secret file** – if the HTTP health check should send
   a header (e.g. `Authorization`), only the **header name** is stored in the config;
   the **value** lives as a file under `data/config/secrets/<file>` and is read only
-  when the config is generated – never stored in `services.yaml`.
+  when the config is generated – never stored in `services.yaml`. The file must be
+  **owned by `root`** (the containers run as root but with `cap_drop: ALL`, so they
+  cannot read files they don't own): `sudo install -o root -g root -m600 token
+  data/config/secrets/`. If it is unreadable, the header is dropped with a warning
+  in the log.
 - **Hide the tile** – the route stays active but no tile appears on the dashboard
   (`hidden`). For alias domains you can also set the target of "/" independently of
   path preservation (`root_to`, see domain aliases above).
