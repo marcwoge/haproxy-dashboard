@@ -14,6 +14,10 @@ _log = logging.getLogger("config-app")
 # Pfad zum kombinierten PEM IM haproxy-Container (siehe entrypoint.sh)
 CERT_PEM = "/usr/local/etc/haproxy/platform.pem"
 
+# Interne CA (opt-in, Compose-Profil "ca"): Root zum Verifizieren von
+# Backend-Zertifikaten der plattform-eigenen step-ca (read-only gemountet).
+INTERNAL_CA_FILE = "/certs-ca/root_ca.crt"
+
 # E4: Verzeichnis mit Secret-Dateien fuer Health-Check-Header (config-app-seitig).
 HC_SECRET_DIR = os.environ.get("HC_SECRET_DIR", "/app/config/secrets")
 # E6: optionaler externer Syslog-Server (zusaetzlich zu stdout). Leer = nur stdout.
@@ -472,7 +476,14 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
             if scheme == "https":
                 srv += " ssl"
                 if s.get("ssl_verify"):
-                    srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
+                    if (s.get("backend_ca") or "").lower() == "internal":
+                        # Stufe 2: gegen die interne step-ca-Root pruefen; SNI/check-sni
+                        # = Backend-Hostname (muss dem Cert-SAN des Backends entsprechen).
+                        bhost = addr.split(":")[0].strip("[]")
+                        srv += (f" verify required ca-file {INTERNAL_CA_FILE}"
+                                f" sni str({bhost}) check-sni {bhost}")
+                    else:
+                        srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
                 else:
                     srv += " verify none"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)

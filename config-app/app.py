@@ -632,6 +632,9 @@ def _service_from_form(form) -> dict:
         "backend": form.get("backend", "").strip(),
         "scheme": form.get("scheme", "http").strip().lower(),
         "ssl_verify": form.get("ssl_verify") == "on",
+        # Stufe 2: Backend-Zertifikat gegen oeffentliche CAs ("" / "public") oder
+        # die interne step-ca ("internal") pruefen.
+        "backend_ca": form.get("backend_ca", "").strip().lower(),
         "strip_path": form.get("strip_path") == "on",
         "icon": form.get("icon", "").strip(),
         "color": form.get("color", "").strip(),
@@ -774,6 +777,8 @@ def validate_service(svc: dict) -> list:
         errors.append("flash.field_invalid_backend")
     if svc.get("scheme") not in _RE_SCHEME:
         errors.append("flash.field_invalid_scheme")
+    if svc.get("backend_ca") not in ("", "public", "internal"):   # Stufe 2
+        errors.append("flash.field_invalid_backend_ca")
     color = svc.get("color", "")
     if color and not _RE_COLOR.match(color):
         errors.append("flash.field_invalid_color")

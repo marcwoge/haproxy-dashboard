@@ -175,6 +175,13 @@
         {{ t('svc.f_ssl') }} <em>{{ t('common.recommended') }}</em>
       </label>
       <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.ssl_warn') }}</p>
+      <label>{{ t('svc.f_backend_ca') }}
+        <select name="backend_ca">
+          <option value="public" {{ 'selected' if (e.backend_ca or 'public') in ('public', '') }}>{{ t('svc.backend_ca_public') }}</option>
+          <option value="internal" {{ 'selected' if e.backend_ca == 'internal' }}>{{ t('svc.backend_ca_internal') }}</option>
+        </select>
+      </label>
+      <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.backend_ca_hint') }}</p>
       <label class="check">
         <input type="checkbox" name="strip_path" {{ 'checked' if e.strip_path }}>
         {{ t('svc.f_strip') }}
