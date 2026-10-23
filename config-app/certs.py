@@ -12,6 +12,8 @@ import re
 import ssl
 from pathlib import Path
 
+from werkzeug.utils import secure_filename
+
 CERTS_DIR = Path(os.environ.get("EXTRA_CERT_DIR_LOCAL", "/app/config/certs"))
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _RE_CERT = re.compile(rb"-----BEGIN CERTIFICATE-----")
@@ -71,8 +73,9 @@ def min_days_left():
 def save_cert(name: str, cert_bytes: bytes, key_bytes: bytes = b"") -> tuple:
     """Kombiniertes PEM (Cert[+Chain]+Key) speichern, 0600. Liefert (ok, info/key)."""
     base = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.splitext(os.path.basename(name or ""))[0]).strip("-.")
-    fname = (base or "cert") + ".pem"
-    if not _SAFE_NAME.match(fname):
+    # secure_filename als von CodeQL anerkannter Sanitizer gegen Path-Injection.
+    fname = secure_filename((base or "cert") + ".pem")
+    if not fname or not _SAFE_NAME.match(fname):
         return False, "flash.cert_bad_name"
     data = cert_bytes or b""
     if key_bytes:
@@ -95,8 +98,8 @@ def save_cert(name: str, cert_bytes: bytes, key_bytes: bytes = b"") -> tuple:
 
 
 def delete_cert(name: str) -> bool:
-    fname = os.path.basename(name or "")
-    if not _SAFE_NAME.match(fname):
+    fname = secure_filename(name or "")   # CodeQL-anerkannter Sanitizer
+    if not fname or not _SAFE_NAME.match(fname):
         return False
     try:
         p = CERTS_DIR / fname
