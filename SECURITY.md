@@ -36,6 +36,13 @@ den Wert eines optionalen Health-Check-Headers (`header_file`, z. B. ein
   `data/config/secrets/` wird (sofern vorhanden) auf `0700`, die Dateien darin
   auf `0600` gesetzt. Beide Container laufen als `root`, der haproxy-Container
   kann die Config also weiterhin lesen.
+- **Health-Check-Header-Secret-Dateien müssen `root` (uid 0) gehören.** Die
+  Container laufen als root, aber mit `cap_drop: ALL` – ohne `CAP_DAC_OVERRIDE`
+  kann der Container-root eine `0600`-Datei nur lesen, wenn sie ihm gehört. Legt
+  man sie als normaler Benutzer an, kann config-app sie nicht lesen und lässt den
+  Header **weg** (mit einer Warnung im App-Log); der betroffene Health-Check
+  scheitert dann (z. B. 401 → der Dienst liefert 503). Also auf dem Host als root
+  anlegen, z. B. `sudo install -o root -g root -m600 token data/config/secrets/`.
 - Der Header-**Wert** wird nie im Admin-GUI, in `status.txt` oder in den Logs
   angezeigt – nur der Dateiname.
 - **`data/haproxy/haproxy.cfg` gehört nicht unverschlüsselt in Backups oder in
