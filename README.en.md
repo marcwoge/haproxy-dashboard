@@ -215,6 +215,28 @@ For services that don't speak HTTP (database, SSH, SMTP, …) the admin GUI has 
 > (the host-side updater does not modify it) — unlike entries in `docker-compose.yml`,
 > which an update can overwrite. The admin GUI shows the exact lines to add.
 
+### External link tiles
+
+For services you only want to **link to** from the dashboard (SaaS, internet
+portals, other sites), there are tiles without a proxy route. Fill the **"External
+link"** field in the service form with an absolute URL:
+
+- The tile opens the URL in a **new tab** (`target="_blank"`, ↗) and shows the host
+  instead of a path.
+- **No route:** no ACL, no `use_backend`; path/backend/servers/timeouts are ignored,
+  a path is not needed.
+- **Optional health check:** if enabled, HAProxy probes the target URL (its host
+  header + SNI) and the tile shows UP/DOWN; a DOWN triggers the normal "backend down"
+  notification. Without a health check the dot stays grey.
+
+```yaml
+services:
+  - name: "Ticket portal"
+    link_url: "https://portal.example.com/login"
+    icon: "🎫"
+    healthcheck: { expect_status: "200|302", interval: 30s }   # optional
+```
+
 ### Onboard automatically: the Platform Connector (sidecar)
 
 Instead of adding the service manually in the admin GUI, you can drop a small

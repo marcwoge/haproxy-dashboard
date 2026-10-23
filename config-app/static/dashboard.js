@@ -8,12 +8,12 @@
   function apply(list) {
     // Kachel-Lookup ueber die vorhandenen Kacheln aufbauen (kein aus Daten
     // zusammengesetzter Selektor -> keine Escaping-/Injection-Probleme).
-    var byPath = {};
+    var byIdx = {};
     grid.querySelectorAll(".tile").forEach(function (t) {
-      byPath[t.getAttribute("data-path")] = t;
+      byIdx[t.getAttribute("data-idx")] = t;
     });
     (list || []).forEach(function (s) {
-      var tile = byPath[s.path];
+      var tile = byIdx[String(s.idx)];
       if (!tile) return;
       var dot = tile.querySelector(".tile-status");
       if (!dot) return;

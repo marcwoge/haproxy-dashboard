@@ -219,6 +219,28 @@ reines TCP (`mode tcp`) an ein oder mehrere Ziele weiter:
 > direkt in `docker-compose.yml`, die bei einem Update verloren gehen können. Das
 > Admin-GUI zeigt die exakten Zeilen an.
 
+### Externe Link-Kacheln
+
+Für Dienste, die man aus dem Dashboard nur **verlinken** will (SaaS, Portale im
+Internet, andere Standorte), gibt es Kacheln ohne Proxy-Route. Im Service-Formular
+das Feld **„Externer Link"** mit einer absoluten URL füllen:
+
+- Die Kachel öffnet die URL in einem **neuen Tab** (`target="_blank"`, ↗) und zeigt
+  den Host statt eines Pfads.
+- **Keine Route:** keine ACL, kein `use_backend`; Pfad/Backend/Server/Timeouts werden
+  ignoriert, ein Pfad ist nicht nötig.
+- **Optionaler Health-Check:** ist er aktiv, prüft HAProxy die Ziel-URL (Host-Header
+  + SNI des Ziels) und die Kachel zeigt UP/DOWN; ein DOWN löst die normale
+  „Backend DOWN"-Benachrichtigung aus. Ohne Health-Check bleibt der Punkt grau.
+
+```yaml
+services:
+  - name: "Ticket-Portal"
+    link_url: "https://portal.example.com/login"
+    icon: "🎫"
+    healthcheck: { expect_status: "200|302", interval: 30s }   # optional
+```
+
 ### Automatisch anbinden: Platform-Connector (Sidecar)
 
 Statt den Service manuell im Admin-GUI anzulegen, kannst du einen kleinen
