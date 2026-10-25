@@ -57,6 +57,15 @@ Danach im Browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
+> **Besitzrechte der Datenverzeichnisse:** Die Container laufen als `root`, aber
+> gehärtet mit `cap_drop: ALL` (ohne `CAP_DAC_OVERRIDE`) – `root` darf dann nur in
+> Verzeichnisse schreiben, die ihm selbst gehören. Legt ein Deploy-Tool oder ein
+> normaler Benutzer die `data/`-/`certs/`-Ordner an, starten die Container sonst
+> nicht (sie geben jetzt eine klare Fehlermeldung aus). Dann auf dem Host einmal:
+> ```bash
+> sudo chown -R root:root data certs
+> ```
+
 ---
 
 ## 2. Konfiguration

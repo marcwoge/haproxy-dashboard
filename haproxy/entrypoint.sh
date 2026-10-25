@@ -22,7 +22,20 @@ KEEP_LINES="${LOG_KEEP_LINES:-600}"  # auf so viele Zeilen kuerzen
 case "$ROTATE_AT" in ''|*[!0-9]*) ROTATE_AT=5000 ;; esac
 case "$KEEP_LINES" in ''|*[!0-9]*) KEEP_LINES=600 ;; esac
 
-mkdir -p /usr/local/etc/haproxy "$DYN"
+mkdir -p /usr/local/etc/haproxy "$DYN" 2>/dev/null || true
+# #22: cap_drop ALL (kein CAP_DAC_OVERRIDE) -> root darf nur in EIGENE Verzeichnisse
+# schreiben. Gehoert der Bind-Mount data/haproxy einem anderen Benutzer, scheitert
+# der Start sonst kryptisch in einer Restart-Schleife -> hier klar melden.
+if ! ( : > "$DYN/.write-test" ) 2>/dev/null; then
+    echo "========================================================================" >&2
+    echo "haproxy: kann nicht in $DYN schreiben (Bind-Mount data/haproxy)." >&2
+    echo "Die Container laufen als root, aber mit cap_drop: ALL (kein" >&2
+    echo "CAP_DAC_OVERRIDE) - root darf nur in EIGENE Verzeichnisse schreiben." >&2
+    echo "Loesung auf dem Host: sudo chown -R root:root data certs" >&2
+    echo "========================================================================" >&2
+    exit 1
+fi
+rm -f "$DYN/.write-test"
 : >> "$LOG"
 
 log() {
