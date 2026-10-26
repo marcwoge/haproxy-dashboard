@@ -88,6 +88,6 @@
 - [x] Persist the self-signed certificate (stable fingerprint across restarts) — N5
 - [x] Data-directory preflight (#22): `config-app` and `haproxy` stop with a clear
       message + `chown` fix on non-writable bind mounts instead of a restart loop;
-      ownership documented in the README
+      ownership documented in the README; CI job `permissions-preflight` replays the case
 - [ ] Run the containers with a fixed non-root UID (instead of root without
       capabilities) – needs a migration of existing `data/` directories and the updater

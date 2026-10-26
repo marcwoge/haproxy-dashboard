@@ -88,6 +88,7 @@
 - [x] Selbstsigniertes Zertifikat persistieren (stabiler Fingerprint über Neustarts) — N5
 - [x] Startcheck der Datenverzeichnisse (#22): `config-app` und `haproxy` brechen bei
       nicht beschreibbaren Bind-Mounts mit klarer Meldung + `chown`-Lösung ab statt in
-      eine Restart-Schleife zu laufen; Besitzrechte im README dokumentiert
+      eine Restart-Schleife zu laufen; Besitzrechte im README dokumentiert;
+      CI-Job `permissions-preflight` stellt den Fall nach
 - [ ] Container mit fester Non-Root-UID betreiben (statt root ohne Capabilities) –
       braucht Migration bestehender `data/`-Verzeichnisse und des Updaters
