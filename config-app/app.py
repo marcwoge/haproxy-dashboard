@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import shutil
+import sys
 import threading
 import time
 import urllib.request
@@ -45,6 +46,35 @@ HAPROXY_CFG = HAPROXY_OUT / "haproxy.cfg"
 STATUS_FILE = HAPROXY_OUT / "status.txt"
 HAPROXY_LOG = HAPROXY_OUT / "haproxy.log"
 APP_LOG = HAPROXY_OUT / "config-app.log"
+
+
+def _preflight_writable() -> None:
+    """#22: Vor allem anderen pruefen, ob die gemounteten Datenverzeichnisse
+    beschreibbar sind. Mit `cap_drop: ALL` fehlt root CAP_DAC_OVERRIDE - gehoeren
+    die Bind-Mounts einem anderen Host-Benutzer, scheitert jeder Schreibzugriff.
+    Statt eines Tracebacks in der Restart-Schleife: eine klare Meldung + Loesung."""
+    dirs = [CONFIG_DIR, HAPROXY_OUT, Path(os.environ.get("UPDATE_DIR", "/app/update"))]
+    bad = []
+    for d in dirs:
+        probe = d / f".write-test-{os.getpid()}"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            probe.write_text("")
+            probe.unlink()
+        except OSError as exc:
+            bad.append(f"  {d}: {exc.strerror or exc}")
+    if bad:
+        print("FEHLER/ERROR: Datenverzeichnis nicht beschreibbar / data directory not writable:\n"
+              + "\n".join(bad) + "\n"
+              f"Container laeuft als uid {os.getuid()} ohne Capabilities (cap_drop: ALL).\n"
+              "Loesung/Fix (auf dem Host, im Projektverzeichnis):\n"
+              "  sudo chown -R 0:0 data certs && docker compose up -d\n"
+              "Siehe README, Abschnitt 'Besitzrechte der Datenverzeichnisse'.",
+              file=sys.stderr, flush=True)
+        raise SystemExit(1)
+
+
+_preflight_writable()
 STATS_URL = os.environ.get("STATS_URL", "http://haproxy:8404/stats;csv")
 
 

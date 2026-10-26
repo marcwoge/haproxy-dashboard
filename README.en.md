@@ -57,6 +57,24 @@ Then in the browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
+### Ownership of the data directories (Linux)
+
+`config-app` and `haproxy` run as **root inside the container, but without any
+capabilities** (`cap_drop: ALL`). Root therefore cannot bypass file
+permissions: the bind mounts (`data/`, `certs/`) must be **owned by uid 0**. If
+a regular user or a deploy tool creates them, the containers stop at startup
+with `data directory not writable`.
+
+Once before the first start (and after a deploy tool copied the files):
+
+```bash
+mkdir -p data/config data/haproxy data/update certs
+sudo chown -R 0:0 data certs
+```
+
+Check: `ls -lan data certs` (column 3 must be `0`). Not needed on Docker
+Desktop (Windows/macOS).
+
 ---
 
 ## 2. Configuration
