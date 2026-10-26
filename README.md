@@ -57,6 +57,24 @@ Danach im Browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
+### Besitzrechte der Datenverzeichnisse (Linux)
+
+`config-app` und `haproxy` laufen im Container als **root, aber ohne
+Capabilities** (`cap_drop: ALL`). Damit fehlt auch root das Recht, fremde
+Dateirechte zu übergehen: Die Bind-Mounts (`data/`, `certs/`) müssen **uid 0
+gehören**. Legt ein normaler Benutzer oder ein Deploy-Tool sie an, brechen die
+Container beim Start mit `Datenverzeichnis nicht beschreibbar` ab.
+
+Einmalig vor dem ersten Start (und nach dem Kopieren durch ein Deploy-Tool):
+
+```bash
+mkdir -p data/config data/haproxy data/update certs
+sudo chown -R 0:0 data certs
+```
+
+Prüfen: `ls -lan data certs` (Spalte 3 muss `0` sein). Unter Docker Desktop
+(Windows/macOS) ist das nicht nötig.
+
 ---
 
 ## 2. Konfiguration

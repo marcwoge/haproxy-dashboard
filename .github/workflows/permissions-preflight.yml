@@ -1,0 +1,82 @@
+# ============================================================
+#  #22: Startcheck der Datenverzeichnisse
+#  Stellt den Fehlerfall nach: Bind-Mounts gehoeren einem anderen Host-Benutzer
+#  (uid 1000) -> config-app + haproxy muessen mit klarer Meldung abbrechen
+#  (kein Traceback). Nach `chown 0:0` muss der Stack sauber hochkommen.
+#  Laeuft nur bei Aenderungen an den betroffenen Komponenten (oeffentliches
+#  Repo: Standard-Runner sind kostenlos).
+# ============================================================
+name: permissions-preflight
+
+on:
+  pull_request:
+    paths:
+      - 'config-app/**'
+      - 'haproxy/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/permissions-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SERVICES: config-app haproxy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Images bauen
+        run: docker compose build $SERVICES
+
+      - name: "Fehlerfall: Datenverzeichnisse gehoeren uid 1000"
+        run: |
+          mkdir -p data/config data/haproxy data/update data/step-ca/certs certs
+          sudo chown -R 1000:1000 data certs
+          docker compose up -d --no-build --pull never $SERVICES
+          for svc in $SERVICES; do
+            ok=0
+            for i in $(seq 1 30); do
+              if docker compose logs "$svc" 2>&1 | grep -q "nicht beschreibbar / data directory not writable\|ist nicht beschreibbar / not writable"; then
+                ok=1; break
+              fi
+              sleep 2
+            done
+            docker compose logs --tail=20 "$svc"
+            if [ "$ok" != 1 ]; then
+              echo "::error::$svc hat die erwartete Startcheck-Meldung nicht ausgegeben"; exit 1
+            fi
+            if docker compose logs "$svc" 2>&1 | grep -q "Traceback"; then
+              echo "::error::$svc bricht mit Traceback statt klarer Meldung ab"; exit 1
+            fi
+          done
+          docker compose down
+
+      - name: "Gutfall: nach chown 0:0 startet der Stack"
+        run: |
+          sudo chown -R 0:0 data certs
+          docker compose up -d --no-build --pull never --wait --wait-timeout 180 $SERVICES
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' \
+              --resolve platform.example.local:443:127.0.0.1 https://platform.example.local/ || true)
+            case "$code" in 2??|3??) break ;; esac
+            sleep 2
+          done
+          echo "HTTP-Status: $code"
+          case "$code" in 2??|3??) ;; *) echo "::error::Dashboard nicht erreichbar (HTTP $code)"; exit 1 ;; esac
+
+      - name: Logs bei Fehler
+        if: failure()
+        run: docker compose logs --tail=100 $SERVICES || true
+
+      - name: Aufraeumen
+        if: always()
+        run: docker compose down -v || true

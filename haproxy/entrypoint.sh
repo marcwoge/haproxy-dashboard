@@ -22,7 +22,29 @@ KEEP_LINES="${LOG_KEEP_LINES:-600}"  # auf so viele Zeilen kuerzen
 case "$ROTATE_AT" in ''|*[!0-9]*) ROTATE_AT=5000 ;; esac
 case "$KEEP_LINES" in ''|*[!0-9]*) KEEP_LINES=600 ;; esac
 
-mkdir -p /usr/local/etc/haproxy "$DYN"
+mkdir -p /usr/local/etc/haproxy "$DYN" 2>/dev/null
+
+# #22: Mit cap_drop: ALL fehlt root CAP_DAC_OVERRIDE. Gehoeren die Bind-Mounts
+# einem anderen Host-Benutzer, klar abbrechen statt in eine Restart-Schleife.
+fail_perm() {
+    echo "FEHLER/ERROR: $1" >&2
+    echo "Container laeuft als uid $(id -u) ohne Capabilities (cap_drop: ALL)." >&2
+    echo "Loesung/Fix (auf dem Host, im Projektverzeichnis):" >&2
+    echo "  sudo chown -R 0:0 data certs && docker compose up -d" >&2
+    echo "Siehe README, Abschnitt 'Besitzrechte der Datenverzeichnisse'." >&2
+    exit 1
+}
+PROBE="$DYN/.write-test-$$"
+if ! ( : > "$PROBE" ) 2>/dev/null; then
+    fail_perm "$DYN (./data/haproxy) ist nicht beschreibbar / not writable"
+fi
+rm -f "$PROBE"
+for f in "$CERT_DIR"/*.key "$CERT_DIR"/privkey.pem; do
+    if [ -e "$f" ] && [ ! -r "$f" ]; then
+        fail_perm "$f (./certs) ist nicht lesbar / not readable"
+    fi
+done
+
 : >> "$LOG"
 
 log() {
