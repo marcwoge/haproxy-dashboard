@@ -683,6 +683,9 @@ def _service_from_form(form) -> dict:
         # Stufe 2: Backend-Zertifikat gegen oeffentliche CAs ("" / "public") oder
         # die interne step-ca ("internal") pruefen.
         "backend_ca": form.get("backend_ca", "").strip().lower(),
+        # #35: TLS-Servername/Pruefname getrennt von der Adresse (fuer IP-Backends mit
+        # namensbasiertem Zertifikat). Leer = Verhalten wie bisher (Name aus Adresse).
+        "tls_server_name": form.get("tls_server_name", "").strip().lower(),
         "strip_path": form.get("strip_path") == "on",
         "icon": form.get("icon", "").strip(),
         "color": form.get("color", "").strip(),
@@ -901,6 +904,15 @@ def validate_service(svc: dict) -> list:
         errors.append("flash.field_invalid_scheme")
     if svc.get("backend_ca") not in ("", "public", "internal", "custom"):   # Stufe 2 / #21
         errors.append("flash.field_invalid_backend_ca")
+    tsn = svc.get("tls_server_name", "")   # #35: Hostname, keine IP/Leerzeichen/Quotes
+    if tsn:
+        try:
+            ipaddress.ip_address(tsn)
+            is_ip = True
+        except ValueError:
+            is_ip = False
+        if is_ip or not _RE_HOST.match(tsn):
+            errors.append("flash.field_invalid_tls_server_name")
     if svc.get("host") and not _RE_HOST.match(svc["host"]):   # #24 Host-Routing
         errors.append("flash.field_invalid_host")
     color = svc.get("color", "")
@@ -1586,6 +1598,7 @@ def _service_from_json(data: dict) -> dict:
         # darf aber public/internal/custom anfordern; ungueltige Werte weist die
         # Validierung weiterhin ab.
         "backend_ca": str(data.get("backend_ca", "")).strip().lower(),
+        "tls_server_name": _s("tls_server_name").lower(),   # #35
         "ssl_verify": bool(data.get("ssl_verify", False)),
         "strip_path": bool(data.get("strip_path", False)),
         "icon": _s("icon"),

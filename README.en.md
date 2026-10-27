@@ -159,6 +159,18 @@ This verifies, e.g., an internal target with a self-signed cert or a service who
 cert comes from the corporate PKI, instead of talking to it unverified with
 `verify SSL` off. Expiry warning as with the SNI certificates.
 
+**Backend by IP, certificate on a name (TLS server name):** many internal services have
+a certificate issued to a name (e.g. `app1.local`) but are reached by **IP** (the name is
+not in DNS). Verification then fails because HAProxy checks against the IP. Set the
+**"TLS server name / verify name"** field on the service (e.g. `app1.local`): the address
+stays the IP (the connection target), but verification is done against the name
+(`sni`/`check-sni`/`verifyhost`). Applies to multiple servers, all backend-CA variants and
+the health checks of external link tiles. Empty = unchanged (name derived from the address).
+> Note: `extra_hosts` in Compose does **not** work as name resolution for backends –
+> services with a name use the Docker resolver (`127.0.0.11`), which does not know
+> `extra_hosts`. For "reach by IP, verify against a name", the TLS server name is the
+> correct approach.
+
 ### Behind a proxy/tunnel (real client IP)
 
 When HAProxy sits behind a reverse proxy or tunnel (e.g. a **Cloudflare Tunnel**),

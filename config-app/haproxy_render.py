@@ -565,15 +565,22 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None,
             srv = f"    server s_{sid}_{n} {addr}"
             if scheme == "https":
                 srv += " ssl"
+                tls_name = (s.get("tls_server_name") or "").strip()   # #35
                 if s.get("ssl_verify"):
                     srv += f" verify required ca-file {_backend_ca_file(s)}"
-                    # internal/custom = namensbasierte interne Ziele -> SNI mitsenden
-                    # (check-sni = Backend-Hostname fuer den Health-Check).
-                    if (s.get("backend_ca") or "").lower() in ("internal", "custom"):
+                    if tls_name:
+                        # #35: Pruefname getrennt von der Adresse (z. B. IP-Backend mit
+                        # namensbasiertem Zertifikat) - SNI, check-sni UND verifyhost.
+                        srv += f" sni str({tls_name}) check-sni {tls_name} verifyhost {tls_name}"
+                    elif (s.get("backend_ca") or "").lower() in ("internal", "custom"):
+                        # internal/custom = namensbasierte interne Ziele -> SNI mitsenden
+                        # (check-sni = Backend-Hostname fuer den Health-Check).
                         bhost = addr.split(":")[0].strip("[]")
                         srv += f" sni str({bhost}) check-sni {bhost}"
                 else:
                     srv += " verify none"
+                    if tls_name:
+                        srv += f" sni str({tls_name}) check-sni {tls_name}"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)
             A(srv)
         A("")
@@ -609,11 +616,15 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None,
         srv = f"    server s_{sid}_0 {host}:{port}"
         if scheme == "https":
             srv += " ssl"
+            tls_name = (s.get("tls_server_name") or "").strip()   # #35
+            name = tls_name or host                               # leer = Name aus der Adresse
             if s.get("ssl_verify"):
                 srv += (f" verify required ca-file {_backend_ca_file(s)}"
-                        f" sni str({host}) check-sni {host}")   # #21: public/internal/custom
+                        f" sni str({name}) check-sni {name}")   # #21: public/internal/custom
+                if tls_name:
+                    srv += f" verifyhost {tls_name}"            # #35: Pruefname erzwingen
             else:
-                srv += f" verify none sni str({host}) check-sni {host}"
+                srv += f" verify none sni str({name}) check-sni {name}"
         # Externer Host -> per libc aufloesen (nicht ueber den Docker-Resolver).
         A(srv + f" check inter {inter} init-addr last,libc,none")
         A("")

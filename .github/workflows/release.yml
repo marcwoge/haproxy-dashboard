@@ -10,7 +10,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write   # fuer das Anlegen des GitHub-Release-Eintrags
   packages: write
   id-token: write   # fuer keyless cosign-Signierung (OIDC)
 
@@ -85,3 +85,18 @@ jobs:
           cosign sign "ghcr.io/${{ github.repository }}/haproxy@${{ steps.haproxy.outputs.digest }}"
           cosign sign "ghcr.io/${{ github.repository }}/connector@${{ steps.connector.outputs.digest }}"
           cosign sign "ghcr.io/${{ github.repository }}/cert-agent@${{ steps.certagent.outputs.digest }}"
+
+      # Legt fuer den Tag einen GitHub-Release-Eintrag mit automatischen Notizen an
+      # (idempotent: existiert er schon, wird er uebersprungen).
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} existiert bereits - uebersprungen."
+          else
+            gh release create "${{ github.ref_name }}" \
+              --repo "${{ github.repository }}" \
+              --title "${{ github.ref_name }}" \
+              --generate-notes
+          fi
