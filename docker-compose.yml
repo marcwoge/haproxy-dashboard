@@ -33,6 +33,11 @@ services:
       # E6: optional syslog target for HAProxy (e.g. 10.0.0.5:514 or /dev/log).
       # Empty = file logging only. Rendered into the generated config.
       - SYSLOG_ADDRESS=${SYSLOG_ADDRESS:-}
+      # #23: real client IP behind a proxy/tunnel. Only when the connection comes
+      # from a TRUSTED_PROXIES network is the client IP taken from REAL_IP_HEADER
+      # (e.g. CF-Connecting-IP). Both empty = off (no header is trusted).
+      - REAL_IP_HEADER=${REAL_IP_HEADER:-}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       # APP_VERSION is NOT set here - it is baked into the image (build arg),
       # so a pulled GHCR image reports its real release version.
       - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}

@@ -35,6 +35,11 @@ def _backend_ca_file(s) -> str:
 HC_SECRET_DIR = os.environ.get("HC_SECRET_DIR", "/app/config/secrets")
 # E6: optionaler externer Syslog-Server (zusaetzlich zu stdout). Leer = nur stdout.
 SYSLOG_ADDRESS = os.environ.get("SYSLOG_ADDRESS", "").strip()
+# #23: echte Client-IP hinter Proxy/Tunnel. Nur wenn die Verbindung aus einem
+# vertrauenswuerdigen Netz (TRUSTED_PROXIES, CIDR-Liste) kommt, wird die Client-IP
+# aus REAL_IP_HEADER (z. B. CF-Connecting-IP) uebernommen. Leer = aus (kein Spoofing).
+REAL_IP_HEADER = os.environ.get("REAL_IP_HEADER", "").strip()
+TRUSTED_PROXIES = os.environ.get("TRUSTED_PROXIES", "").strip()
 _BALANCE = ("roundrobin", "leastconn")
 # Verzeichnis zusaetzlicher Zertifikate (SNI) IM haproxy-Container (Bind-Mount von
 # data/config/certs). HAProxy waehlt anhand SNI; leer -> nicht referenziert.
@@ -283,6 +288,27 @@ def _hc_header(hc) -> str:
     return f' hdr {name} "{val}"'
 
 
+def _real_ip_line() -> str:
+    """#23: 'http-request set-src ...' nur fuer Verbindungen aus vertrauenswuerdigen
+    Proxy-Netzen -> echte Client-IP aus dem Header, sonst leer (kein Spoofing)."""
+    if not REAL_IP_HEADER or not _RE_HDRNAME.match(REAL_IP_HEADER):
+        return ""
+    cidrs = []
+    for tok in re.split(r"[,\s]+", TRUSTED_PROXIES):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            ipaddress.ip_network(tok, strict=False)   # IPv4/IPv6-CIDR validieren
+            cidrs.append(tok)
+        except ValueError:
+            pass
+    if not cidrs:
+        return ""   # ohne vertrauenswuerdige Netze NICHT aus Headern ableiten
+    return (f"    http-request set-src req.hdr_ip({REAL_IP_HEADER},1) "
+            f"if {{ src {' '.join(cidrs)} }}")
+
+
 def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None) -> str:
     all_services = config.get("services", [])
     trust_cas = sorted(trust_cas or [])   # #21: nur fuer den cfg-Hash (Reload-Trigger)
@@ -384,6 +410,11 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None)
         A("    # SNI-Zertifikate: " + ", ".join(extra_certs))
         bind += f" crt {EXTRA_CERT_DIR}"
     A(bind + " alpn h2,http/1.1")
+    # #23: echte Client-IP aus dem Proxy-/Tunnel-Header uebernehmen (nur aus
+    # vertrauenswuerdigen Netzen) - MUSS vor X-Client-IP/Rate-Limit stehen.
+    rip = _real_ip_line()
+    if rip:
+        A(rip)
     A("    http-request set-header X-Forwarded-Proto https")
     A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
     # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.

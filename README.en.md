@@ -125,6 +125,20 @@ This verifies, e.g., an internal target with a self-signed cert or a service who
 cert comes from the corporate PKI, instead of talking to it unverified with
 `verify SSL` off. Expiry warning as with the SNI certificates.
 
+### Behind a proxy/tunnel (real client IP)
+
+When HAProxy sits behind a reverse proxy or tunnel (e.g. a **Cloudflare Tunnel**),
+it only sees the proxy as the source — so the login lockout and the logs use that
+single IP (one attacker locks everyone out). With `REAL_IP_HEADER` +
+`TRUSTED_PROXIES` (in `.env`) HAProxy takes the real client IP from the header —
+**only** when the connection comes from a trusted network (otherwise the header
+would be spoofable):
+
+```bash
+REAL_IP_HEADER=CF-Connecting-IP
+TRUSTED_PROXIES=173.245.48.0/20 103.21.244.0/22   # your proxy's/tunnel's networks
+```
+
 ---
 
 ## 3. Adding a container as a tile
