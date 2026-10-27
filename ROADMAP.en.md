@@ -49,8 +49,9 @@
   - [x] Registration API **separate from the human admin auth** (`/api/v1/*`,
         token only, CSRF-exempt).
   - [x] **TLS verification** connector→config-app (`CA_BUNDLE`/`INSECURE`).
-  - [ ] open: backend **whitelist** against SSRF (the target is K2-validated but not
-        restricted to allowed hosts – the token is treated as trusted infrastructure).
+  - [x] backend **allowlist** against SSRF (opt-in `CONNECTOR_BACKEND_ALLOWLIST`:
+        exact host/wildcard suffix/IP/CIDR, optional port pin; empty = unchanged, the
+        token is treated as trusted infrastructure) — #30, v1.15
 
 ## Security & hardening (from the security audit)
 

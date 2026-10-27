@@ -49,8 +49,9 @@
   - [x] Registrierungs-API **getrennt von der Menschen-Admin-Auth** (`/api/v1/*`,
         nur Token, von CSRF ausgenommen).
   - [x] **TLS-Verifikation** Connector→config-app (`CA_BUNDLE`/`INSECURE`).
-  - [ ] offen: Backend-**Whitelist** gegen SSRF (Ziel ist K2-validiert, aber nicht
-        auf erlaubte Hosts beschränkt – Token gilt als vertrauenswürdige Infrastruktur).
+  - [x] Backend-**Allowlist** gegen SSRF (opt-in `CONNECTOR_BACKEND_ALLOWLIST`:
+        exakter Host/Wildcard-Suffix/IP/CIDR, optional Port-Pin; leer = unverändert,
+        Token gilt als vertrauenswürdige Infrastruktur) — #30, v1.15
 
 ## Sicherheit & Härtung (aus Security-Audit)
 

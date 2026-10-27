@@ -3,7 +3,7 @@
 **Language / Sprache:** English (this document) · [Deutsch](README.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.14.1-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.15.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -362,6 +362,13 @@ networks:
 There is also a **`register` mode** (your app joins the shared network, no extra
 hop). For all variables, both modes and details see
 [`connector/README.md`](connector/README.md).
+
+> **SSRF hardening (optional):** since a connector reports its own backend target, you
+> can restrict which backends may be registered on the platform with
+> **`CONNECTOR_BACKEND_ALLOWLIST`** (comma- or space-separated): exact host (`app1`),
+> wildcard suffix (`*.internal`), IP, CIDR (`10.0.0.0/8`), optionally port-pinned
+> (`app1:8080`). Empty = any valid backend is allowed (the token is treated as trusted
+> infrastructure). Applies to the connector API only; the admin GUI stays unrestricted.
 
 ---
 
