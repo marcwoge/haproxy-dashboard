@@ -57,6 +57,22 @@ echo "[install] acme-updater.path aktiviert."
 systemctl enable --now acme-update-check.timer
 echo "[install] acme-update-check.timer aktiviert (Auto-Update via AUTO_UPDATE=true)."
 
+# 5) #33: Signatur-Voraussetzungen pruefen. Default ist VERIFY_SIGNATURES=true; ohne
+#    cosign bricht JEDES Update fail-closed ab. Wert ohne Sourcing aus .env lesen.
+VERIFY_SIGNATURES="$(grep -E '^VERIFY_SIGNATURES=' "$PROJECT_DIR/.env" 2>/dev/null \
+    | tail -1 | cut -d= -f2- | tr -d "\"' " || true)"
+VERIFY_SIGNATURES="${VERIFY_SIGNATURES:-true}"
+if [ "$VERIFY_SIGNATURES" != "false" ]; then
+    if command -v cosign >/dev/null 2>&1; then
+        echo "[install] cosign gefunden: $(command -v cosign). Cache: /var/lib/acme-updater/sigstore (StateDirectory)."
+    else
+        echo "[install] WARN: VERIFY_SIGNATURES=true, aber cosign ist NICHT installiert." >&2
+        echo "[install]       -> JEDES Update wird fail-closed abgebrochen, bis cosign vorhanden ist." >&2
+        echo "[install]       Installieren: https://docs.sigstore.dev/cosign/installation/" >&2
+        echo "[install]       (oder in .env  VERIFY_SIGNATURES=false  setzen - NICHT empfohlen)" >&2
+    fi
+fi
+
 cat <<EOF
 
 Fertig. Naechste Schritte:

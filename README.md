@@ -523,9 +523,15 @@ sudo ./updater/install-linux.sh          # installiert path+service, härtet aud
 ```
 
 Der Service ([host-updater.sh](updater/host-updater.sh)) läuft als root, ist aber
-gehärtet (`NoNewPrivileges`, `ProtectSystem`), und **verifiziert jede Signatur**:
-Selbst wer die Anforderungsdatei fälscht, kann höchstens ein **korrekt signiertes
-Release** ausrollen – keinen beliebigen Code.
+gehärtet (`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`), und **verifiziert jede
+Signatur**: Selbst wer die Anforderungsdatei fälscht, kann höchstens ein **korrekt
+signiertes Release** ausrollen – keinen beliebigen Code.
+
+> **cosign-Cache (Signaturprüfung):** cosign legt seinen TUF-/Sigstore-Cache unter
+> `$HOME/.sigstore` an. Da der Dienst mit `ProtectHome=true` läuft (kein Schreibzugriff
+> auf `/root`), setzt die Unit ein `StateDirectory` und `HOME`/`TUF_ROOT` auf
+> `/var/lib/acme-updater` – dort liegt der Cache, die Härtung bleibt erhalten. Ohne
+> installiertes `cosign` bricht jedes Update fail-closed ab (der Installer warnt).
 
 ### Auto-Update-Zeitplan (optional)
 
