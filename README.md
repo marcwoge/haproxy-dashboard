@@ -109,6 +109,23 @@ zusätzlich hochladen) und die Root-CA auf den Clients verteilen (z. B. per GPO)
 `fullchain.pem` (inkl. Schlüssel) hochladen bzw. per Cron erneuern. Provider-Zugangs-
 daten gehören als Secret auf den Host, nicht in `services.yaml`.
 
+### Backend-Zertifikate prüfen (eigene/interne CA)
+
+Das Gegenstück zur Frontend-Seite: Soll HAProxy ein **https-Backend** verifizieren
+(`SSL-Prüfung an`), wählt man pro Dienst unter **„Erweitert“** die **Backend-CA**:
+
+- **Öffentliche CAs** (Standard) – das CA-Bundle im Container.
+- **Interne CA (step-ca)** – die plattform-eigene CA (Compose-Profil `ca`, siehe
+  [`ca/README.md`](ca/README.md)).
+- **Eigene/hochgeladene CAs** – unter **„Vertrauenswürdige Backend-CAs“** lädst du
+  eine **Firmen-/AD-Root-CA** oder das **self-signed Zertifikat** eines Ziels hoch
+  (PEM oder DER, **ohne** privaten Schlüssel). HAProxy prüft die Backends dann
+  dagegen. Gilt auch für die Health-Checks externer Link-Kacheln.
+
+So wird z. B. ein internes Ziel mit self-signed Cert oder ein Dienst mit einem Cert
+aus der Firmen-PKI **verifiziert** statt nur mit `SSL-Prüfung aus` ungeprüft
+angesprochen. Ablaufwarnung wie bei den SNI-Zertifikaten.
+
 ---
 
 ## 3. Einen Container als Kachel hinzufügen

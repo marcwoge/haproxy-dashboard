@@ -17,6 +17,19 @@ CERT_PEM = "/usr/local/etc/haproxy/platform.pem"
 # Interne CA (opt-in, Compose-Profil "ca"): Root zum Verifizieren von
 # Backend-Zertifikaten der plattform-eigenen step-ca (read-only gemountet).
 INTERNAL_CA_FILE = "/certs-ca/root_ca.crt"
+# #21: Bundle hochgeladener Trust-Certs (Firmen-/AD-Root-CA oder self-signed
+# Ziel-Cert) zum Verifizieren von Backends (read-only gemountet).
+BACKEND_CA_BUNDLE = "/certs-trust/ca-bundle.pem"
+
+
+def _backend_ca_file(s) -> str:
+    """#21/v1.8: ca-file je nach Dienst-Einstellung backend_ca."""
+    choice = (s.get("backend_ca") or "").lower()
+    if choice == "internal":
+        return INTERNAL_CA_FILE
+    if choice == "custom":
+        return BACKEND_CA_BUNDLE
+    return "/etc/ssl/certs/ca-certificates.crt"   # oeffentliche CAs (Default)
 
 # E4: Verzeichnis mit Secret-Dateien fuer Health-Check-Header (config-app-seitig).
 HC_SECRET_DIR = os.environ.get("HC_SECRET_DIR", "/app/config/secrets")
@@ -270,8 +283,9 @@ def _hc_header(hc) -> str:
     return f' hdr {name} "{val}"'
 
 
-def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
+def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None) -> str:
     all_services = config.get("services", [])
+    trust_cas = sorted(trust_cas or [])   # #21: nur fuer den cfg-Hash (Reload-Trigger)
     domain = str(config.get("domain", "")).strip()
     alias_lines = _alias_lines(config.get("domain_aliases"), domain)   # #8
     extra_certs = sorted(extra_certs or [])                            # #9 (SNI)
@@ -293,6 +307,9 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
 
     A("# Automatisch generiert von config-app - nicht von Hand editieren.")
     A("# Aenderungen ueber das Admin-GUI (/admin) oder services.yaml.")
+    if trust_cas:
+        # #21: aendert den cfg-Hash bei Upload/Loeschen -> Watcher reload.
+        A("# Vertrauenswuerdige Backend-CAs: " + ", ".join(trust_cas))
     A("")
     A("global")
     A("    log stdout format raw local0")
@@ -476,14 +493,12 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
             if scheme == "https":
                 srv += " ssl"
                 if s.get("ssl_verify"):
-                    if (s.get("backend_ca") or "").lower() == "internal":
-                        # Stufe 2: gegen die interne step-ca-Root pruefen; SNI/check-sni
-                        # = Backend-Hostname (muss dem Cert-SAN des Backends entsprechen).
+                    srv += f" verify required ca-file {_backend_ca_file(s)}"
+                    # internal/custom = namensbasierte interne Ziele -> SNI mitsenden
+                    # (check-sni = Backend-Hostname fuer den Health-Check).
+                    if (s.get("backend_ca") or "").lower() in ("internal", "custom"):
                         bhost = addr.split(":")[0].strip("[]")
-                        srv += (f" verify required ca-file {INTERNAL_CA_FILE}"
-                                f" sni str({bhost}) check-sni {bhost}")
-                    else:
-                        srv += " verify required ca-file /etc/ssl/certs/ca-certificates.crt"
+                        srv += f" sni str({bhost}) check-sni {bhost}"
                 else:
                     srv += " verify none"
             srv += " " + _server_opts(addr, inter=inter, extra=extra)
@@ -522,8 +537,8 @@ def render(config: dict, stats_auth: str = "", extra_certs=None) -> str:
         if scheme == "https":
             srv += " ssl"
             if s.get("ssl_verify"):
-                srv += (" verify required ca-file /etc/ssl/certs/ca-certificates.crt"
-                        f" sni str({host}) check-sni {host}")
+                srv += (f" verify required ca-file {_backend_ca_file(s)}"
+                        f" sni str({host}) check-sni {host}")   # #21: public/internal/custom
             else:
                 srv += f" verify none sni str({host}) check-sni {host}"
         # Externer Host -> per libc aufloesen (nicht ueber den Docker-Resolver).

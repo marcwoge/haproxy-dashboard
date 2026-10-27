@@ -179,6 +179,7 @@
         <select name="backend_ca">
           <option value="public" {{ 'selected' if (e.backend_ca or 'public') in ('public', '') }}>{{ t('svc.backend_ca_public') }}</option>
           <option value="internal" {{ 'selected' if e.backend_ca == 'internal' }}>{{ t('svc.backend_ca_internal') }}</option>
+          <option value="custom" {{ 'selected' if e.backend_ca == 'custom' }}>{{ t('svc.backend_ca_custom') }}</option>
         </select>
       </label>
       <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.backend_ca_hint') }}</p>
@@ -384,6 +385,51 @@
         <button class="btn" type="submit">{{ t('dc.cert_upload') }}</button>
       </div>
     </form>
+  </section>
+
+  {# ----- #21: vertrauenswuerdige Backend-CAs ----- #}
+  <section class="card" id="trust">
+    <h2>{{ t('ca.heading') }}</h2>
+    <p class="upd-hint">{{ t('ca.intro') }}</p>
+    <table class="svc-table">
+      <thead><tr><th>{{ t('dc.cert_subject') }}</th><th>{{ t('dc.cert_issuer') }}</th><th>{{ t('dc.cert_sans') }}</th><th>{{ t('dc.cert_expiry') }}</th><th></th></tr></thead>
+      <tbody>
+      {% for c in trust_list %}
+        <tr>
+          <td>{{ c.subject or c.file }}</td>
+          <td>{{ c.issuer }}</td>
+          <td><code>{{ c.sans | join(', ') }}</code></td>
+          <td>
+            {% if c.days_left is not none %}
+              <span class="dot dot-{{ 'down' if c.days_left < 14 else 'up' }}"></span>
+              {% if c.days_left < 0 %}{{ t('dc.cert_expired') }}{% else %}{{ t('dc.cert_days', n=c.days_left) }}{% endif %}
+            {% else %}–{% endif %}
+          </td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('admin_ca_delete') }}"
+                  onsubmit="return confirm('{{ c.file }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="file" value="{{ c.file }}">
+              <button class="btn btn-sm btn-danger" type="submit">{{ t('common.delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">{{ t('ca.none') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('admin_ca_upload') }}" class="form-grid"
+          enctype="multipart/form-data" style="margin-top:.6rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>{{ t('ca.file') }}
+        <input name="ca_file" type="file" accept=".crt,.pem,.cer,.der" required>
+      </label>
+      <div class="full form-actions">
+        <button class="btn" type="submit">{{ t('ca.upload') }}</button>
+      </div>
+    </form>
+    <p class="upd-hint">{{ t('ca.hint') }}</p>
   </section>
 
   {# ----- E3: TCP-Streams ----- #}

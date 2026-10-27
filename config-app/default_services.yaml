@@ -57,10 +57,12 @@ services:
     color: "#22c55e"                # optional tile color (empty = default)
     description: "Example application (adjust in the admin GUI)"
     enabled: true
-    # Stage 2 (internal CA) - verify the backend cert against the internal step-ca
-    # instead of public CAs. Needs scheme: https + ssl_verify + the `ca` compose
-    # profile; SNI/check-sni = the backend host. See ca/README.md.
-    # backend_ca: internal
+    # Verify the backend cert against (needs scheme: https + ssl_verify):
+    #   public   = public CA bundle (default)
+    #   internal = the internal step-ca (needs the `ca` compose profile; see ca/README.md)
+    #   custom   = CAs uploaded in the admin GUI under "Trusted backend CAs"
+    #              (a company/AD root CA, or a target's self-signed certificate)
+    # backend_ca: custom
     # Optional per-service routing (see the admin GUI section "Advanced"):
     # timeout_server: 600s            # long uploads/exports (default: global 60s)
     # timeout_tunnel: 1h              # WebSocket / long-polling
