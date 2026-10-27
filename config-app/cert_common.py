@@ -56,10 +56,19 @@ def _decrypt_des_cbc_pem(data: bytes, passphrase: bytes) -> bytes:
     """#32: Mit DES-CBC verschluesseltes traditionelles PEM in-memory entschluesseln
     und das entschluesselte DER liefern. DES wird als 3DES mit K1=K2=K3 gerechnet
     (cryptography hat keine Single-DES-Primitive). Nichts auf Platte/in Prozesslisten."""
+    data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")   # #34: CRLF/CR -> LF
     m = _DEK_INFO.search(data)
     iv = bytes.fromhex(m.group(2).decode("ascii"))
     text = data.decode("latin-1")
-    body_b64 = text.split("\n\n", 1)[1].split("-----END", 1)[0]
+    # Base64-Koerper = alles nach der Leerzeile hinter den Headern bis -----END.
+    # Fehlt die Leerzeile, Header (BEGIN + "Key: Value"-Zeilen) zeilenweise ueberspringen.
+    parts = text.split("\n\n", 1)
+    if len(parts) == 2:
+        body_b64 = parts[1].split("-----END", 1)[0]
+    else:
+        body_b64 = "\n".join(
+            ln for ln in text.splitlines()
+            if ln.strip() and ":" not in ln and not ln.startswith("-----"))
     body = base64.b64decode("".join(body_b64.split()))
     key8 = _evp_bytes_to_key(passphrase, iv[:8], 8)          # Salt = IV (DES: 8 Byte)
     dec = Cipher(TripleDES(key8 * 3), modes.CBC(iv)).decryptor()
