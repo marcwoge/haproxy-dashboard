@@ -57,14 +57,19 @@ Danach im Browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
-> **Besitzrechte der Datenverzeichnisse:** Die Container laufen als `root`, aber
-> gehärtet mit `cap_drop: ALL` (ohne `CAP_DAC_OVERRIDE`) – `root` darf dann nur in
-> Verzeichnisse schreiben, die ihm selbst gehören. Legt ein Deploy-Tool oder ein
-> normaler Benutzer die `data/`-/`certs/`-Ordner an, starten die Container sonst
-> nicht (sie geben jetzt eine klare Fehlermeldung aus). Dann auf dem Host einmal:
+> **Besitzrechte der Datenverzeichnisse:** Die Container laufen als feste
+> **Non-Root-UID `1000`** (gehärtet mit `cap_drop: ALL`). Die bind-gemounteten
+> `data/`-/`certs/`-Ordner müssen deshalb dieser UID gehören, sonst starten die
+> Container nicht (sie geben eine klare Fehlermeldung aus). Auf dem Host einmal:
 > ```bash
-> sudo chown -R root:root data certs
+> sudo chown -R 1000:1000 data certs
 > ```
+> Der host-seitige Updater und `updater/install-linux.sh` erledigen das automatisch;
+> der Einzeiler ist nur für manuelle Installationen / Erst-Starts nötig.
+>
+> **Upgrade von ≤ v1.11 auf ≥ v1.12:** Dort liefen die Container noch als `root`,
+> `data/`/`certs/` gehören also root. Vor dem ersten Start der neuen Images einmal
+> den `chown` oben ausführen (im Auto-Update-Modus übernimmt das der Updater).
 
 ---
 
@@ -239,9 +244,9 @@ Im Service-Formular unter **„Erweitert (optional)"** (bzw. direkt in `services
   Header (z. B. `Authorization`) senden, wird nur der **Header-Name** in der
   Konfiguration hinterlegt; der **Wert** liegt als Datei unter
   `data/config/secrets/<datei>` und wird erst beim Generieren der Config gelesen –
-  nie in `services.yaml` gespeichert. Die Datei muss **`root` gehören** (die
-  Container laufen als root, aber mit `cap_drop: ALL`, also ohne das Recht, fremde
-  Dateien zu lesen): `sudo install -o root -g root -m600 token data/config/secrets/`.
+  nie in `services.yaml` gespeichert. Die Datei muss der **App-UID `1000` gehören**
+  (die Container laufen als Non-Root mit `cap_drop: ALL`, also ohne das Recht, fremde
+  Dateien zu lesen): `sudo install -o 1000 -g 1000 -m600 token data/config/secrets/`.
   Ist sie unlesbar, wird der Header mit einer Warnung im Log weggelassen.
 - **Kachel ausblenden** – die Route bleibt aktiv, es erscheint aber keine Kachel
   auf dem Dashboard (`hidden`). Für Alias-Domains lässt sich zudem das Ziel von

@@ -34,6 +34,14 @@ COSIGN_OIDC_ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubuserconten
 audit()  { printf '%s | host | %s\n' "$(date -u +%FT%TZ)" "$*" >> "$AUDIT"; }
 result() { printf '{"state":"%s","ts":%s,"detail":"%s"}\n' "$1" "$(date +%s)" "${2:-}" > "$RES.tmp" && mv "$RES.tmp" "$RES"; }
 
+# #25: both app containers run as a fixed non-root UID (1000). Make sure the
+# bind-mounted state belongs to it, so an update from an older (root-owning)
+# release does not leave the containers unable to write (restart loop). Idempotent;
+# the append-only host-audit.log inside data/update may refuse chown -> tolerated.
+ensure_ownership() {
+    chown -R 1000:1000 "$PROJECT_DIR/data" "$PROJECT_DIR/certs" 2>/dev/null || true
+}
+
 # IMAGE_TAG dauerhaft in .env schreiben, damit Neustarts die Version behalten.
 persist_tag() {
     local tag="$1"
@@ -140,6 +148,8 @@ fi
 
 audit "RECREATE services=[$changed]"
 result "running" "deploy"
+# #25: vor dem (Neu-)Start sicherstellen, dass die Non-Root-UID in die Mounts darf.
+ensure_ownership
 if ! docker compose up -d $changed >>"$AUDIT" 2>&1; then
     audit "DEPLOY_FAILED -> rollback"; do_rollback "deploy-error"; exit 1
 fi

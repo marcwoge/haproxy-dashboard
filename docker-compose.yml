@@ -68,8 +68,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    # M1: container hardening. The Python app needs no Linux capabilities; the
-    # root FS is read-only (writes only into the mounted volumes + /tmp).
+    # M1 + #25: container hardening. Runs as a fixed non-root UID (USER 1000 in the
+    # image), needs no Linux capabilities, and the root FS is read-only (writes only
+    # into the mounted volumes + /tmp). The bind-mounts below must be owned by uid
+    # 1000 on the host (the updater/install script and README cover this).
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -118,14 +120,16 @@ services:
     # this entry provides the required host-gateway resolution.)
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # M1: hardening. HAProxy only needs NET_BIND_SERVICE (ports 80/443); all
-    # other capabilities are dropped and privilege escalation is prevented.
+    # M1 + #25: hardening. HAProxy runs as a fixed non-root UID (USER 1000 in the
+    # image) with ALL capabilities dropped. Instead of NET_BIND_SERVICE it binds the
+    # low ports 80/443 (and any TCP-stream port) via this per-container sysctl, which
+    # only affects this container's own network namespace (safe, not privileged).
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - NET_BIND_SERVICE
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
     networks:
       - platform
     restart: unless-stopped

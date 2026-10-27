@@ -69,8 +69,9 @@
 
 **Medium**
 - [x] Harden containers: `cap_drop: [ALL]`, `no-new-privileges`, config-app `read_only`
-      +tmpfs; haproxy only `NET_BIND_SERVICE` — M1
-      (non-root/UID drop optional, still open due to bind-mount ownership)
+      +tmpfs — M1
+      (non-root/UID drop followed up: fixed UID 1000, full `cap_drop: ALL`; low ports
+      via sysctl instead of `NET_BIND_SERVICE` — #25, v1.12)
 - [x] Constant-time password comparison (`hmac.compare_digest`) — M2
 - [x] Enforce `SECRET_KEY` instead of a hardcoded default (persistently generated) — M3
 - [x] Secrets via Docker/Compose *secrets* instead of `environment:` (opt-in, `*_FILE`) — M4
