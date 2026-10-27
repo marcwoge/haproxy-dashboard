@@ -123,6 +123,16 @@ if [ "$VERIFY_SIGNATURES" = "true" ]; then
     if ! command -v cosign >/dev/null 2>&1; then
         audit "SIGNATURE_ABORT cosign fehlt (VERIFY_SIGNATURES=true)"; result "failed" "signature"; exit 1
     fi
+    # #33: cosign braucht einen beschreibbaren Cache unter $HOME/.sigstore (TUF_ROOT).
+    # Die systemd-Unit setzt HOME/TUF_ROOT auf ein StateDirectory. Fehlen sie (z. B.
+    # manueller Aufruf) und ist HOME nicht beschreibbar, auf ein Temp-Verzeichnis
+    # ausweichen, damit die Pruefung nicht an "read-only file system" scheitert.
+    if [ -z "${TUF_ROOT:-}" ] && ! { [ -n "${HOME:-}" ] && [ -w "${HOME:-/root}" ]; }; then
+        _cosign_home="$(mktemp -d)"
+        export HOME="$_cosign_home"
+        export TUF_ROOT="$_cosign_home/sigstore"
+        audit "SIGNATURE_CACHE_FALLBACK HOME=$_cosign_home (HOME war nicht beschreibbar)"
+    fi
     for ref in "$CONFIG_REF" "$HAPROXY_REF"; do
         if ! verify_one "$ref"; then
             audit "SIGNATURE_FAILED ref=$ref -> Abbruch, kein Deploy"; result "failed" "signature"; exit 1

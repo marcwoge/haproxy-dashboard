@@ -14,3 +14,11 @@ User=root
 NoNewPrivileges=true
 ProtectHome=true
 ProtectSystem=full
+# #33: cosign legt seinen TUF-/Sigstore-Cache unter $HOME/.sigstore an. Unter
+# ProtectHome=true ist /root nicht beschreibbar -> die Signaturpruefung scheiterte an
+# "mkdir /root/.sigstore: read-only file system". StateDirectory erzeugt ein
+# beschreibbares /var/lib/acme-updater (von ProtectHome nicht betroffen, unter
+# ProtectSystem=full beschreibbar); HOME/TUF_ROOT zeigen dorthin. Haertung bleibt.
+StateDirectory=acme-updater
+Environment=HOME=/var/lib/acme-updater
+Environment=TUF_ROOT=/var/lib/acme-updater/sigstore

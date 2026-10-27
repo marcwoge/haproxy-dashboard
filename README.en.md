@@ -3,7 +3,7 @@
 **Language / Sprache:** English (this document) · [Deutsch](README.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.15.2-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.15.3-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -512,9 +512,15 @@ sudo ./updater/install-linux.sh          # installs path+service, hardens audit.
 ```
 
 The service ([host-updater.sh](updater/host-updater.sh)) runs as root but is hardened
-(`NoNewPrivileges`, `ProtectSystem`), and **verifies every signature**: even someone
-who forges the request file can at most roll out a **correctly signed release** – not
-arbitrary code.
+(`NoNewPrivileges`, `ProtectSystem`, `ProtectHome`), and **verifies every signature**:
+even someone who forges the request file can at most roll out a **correctly signed
+release** – not arbitrary code.
+
+> **cosign cache (signature check):** cosign stores its TUF/Sigstore cache under
+> `$HOME/.sigstore`. Since the service runs with `ProtectHome=true` (no write access to
+> `/root`), the unit sets a `StateDirectory` and `HOME`/`TUF_ROOT` to
+> `/var/lib/acme-updater` – that is where the cache lives, with the hardening kept
+> intact. Without `cosign` installed every update aborts fail-closed (the installer warns).
 
 ### Auto-update schedule (optional)
 
