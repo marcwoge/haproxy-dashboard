@@ -36,6 +36,7 @@ import notifier
 import i18n
 import certs
 import trust
+import platform_cert
 
 DEFAULT_LANG = os.environ.get("PLATFORM_LANG", "de")
 
@@ -371,8 +372,13 @@ def save_config(cfg: dict) -> None:
 
 def regenerate(cfg: dict) -> None:
     HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
+    # #27: Plattform-Zertifikat - Pfad (managed vs. Host/Self-signed) und Fingerprint
+    # (Letzterer als Kommentar in die Config -> Austausch loest Watcher-Reload aus).
+    _pc = platform_cert.info()
     text = render_haproxy(cfg, stats_auth=STATS_AUTH, extra_certs=certs.cert_files(),
-                          trust_cas=trust.ca_files())
+                          trust_cas=trust.ca_files(),
+                          platform_crt=platform_cert.haproxy_crt_path(),
+                          platform_fp=_pc.get("fingerprint", ""))
     tmp = HAPROXY_CFG.with_suffix(".cfg.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
@@ -1018,6 +1024,8 @@ def admin():
         update=update_info,
         update_audit=updater.read_audit(40),
         cert_list=certs.list_certs(),
+        platform_cert=platform_cert.info(),          # #27: aktives Plattform-Zertifikat
+        platform_cert_backup=platform_cert.has_backup(),
         trust_list=trust.list_cas(),
         tcp_streams=cfg["tcp_streams"],
         stream_status=stream_status,
@@ -1383,6 +1391,55 @@ def admin_cert_delete():
     return redirect(url_for("admin") + "#domains")
 
 
+@app.route("/admin/platform-cert", methods=["POST"])
+@requires_auth
+def admin_platform_cert():
+    # #27: Plattform-Zertifikat (Standard-Zertifikat des HTTPS-Frontends) austauschen.
+    # Validierung (Key<->Cert, Parsebarkeit) in platform_cert.save(); danach Reload
+    # ueber den Watcher ohne Container-Neustart. Passphrase (#28) wird NICHT gespeichert.
+    t = _t()
+    cert_f = request.files.get("cert_file")
+    key_f = request.files.get("key_file")
+    if not cert_f or not cert_f.filename or not key_f or not key_f.filename:
+        flash(t("flash.cert_need_both"), "error")
+        return redirect(url_for("admin") + "#domains")
+    passphrase = (request.form.get("passphrase") or "").encode("utf-8") or None
+    ok, info = platform_cert.save(cert_f.read(), key_f.read(), passphrase=passphrase)
+    # Passphrase nicht im Speicher halten / nicht loggen.
+    passphrase = None
+    if ok:
+        regenerate(load_config())          # Fingerprint-Kommentar -> Watcher reload
+        _log.info("Plattform-Zertifikat ausgetauscht (Quelle jetzt: managed)")
+        flash(t(info), "ok")
+    else:
+        flash(t(info), "error")
+    return redirect(url_for("admin") + "#domains")
+
+
+@app.route("/admin/platform-cert/restore", methods=["POST"])
+@requires_auth
+def admin_platform_cert_restore():
+    t = _t()
+    if platform_cert.restore_backup():
+        regenerate(load_config())
+        _log.info("Plattform-Zertifikat: vorherige Fassung wiederhergestellt")
+        flash(t("flash.platform_cert_restored"), "ok")
+    else:
+        flash(t("flash.platform_cert_no_backup"), "error")
+    return redirect(url_for("admin") + "#domains")
+
+
+@app.route("/admin/platform-cert/delete", methods=["POST"])
+@requires_auth
+def admin_platform_cert_delete():
+    t = _t()
+    if platform_cert.delete_managed():
+        regenerate(load_config())          # zurueck auf Host-/Self-signed-Zertifikat
+        _log.info("Plattform-Zertifikat: GUI-Verwaltung entfernt (Fallback aktiv)")
+        flash(t("flash.platform_cert_reverted"), "ok")
+    return redirect(url_for("admin") + "#domains")
+
+
 @app.route("/admin/ca", methods=["POST"])
 @requires_auth
 def admin_ca_upload():
@@ -1626,9 +1683,13 @@ def _notify_monitor() -> None:
                           {"service": names.get(idx)})
                 down = now_down
 
-            # 4) Zertifikats-Ablauf (einmal je Schwelle: 30/14/7 Tage)
+            # 4) Zertifikats-Ablauf (einmal je Schwelle: 30/14/7 Tage).
+            # #27: das Plattform-Zertifikat wird mit einbezogen (kleinste Laufzeit
+            # ueber SNI-Zertifikate UND Plattform-Zertifikat).
             if n.get("events", {}).get("cert_expiry", True):
-                dl = certs.min_days_left()
+                _dls = [x for x in (certs.min_days_left(), platform_cert.days_left())
+                        if isinstance(x, int)]
+                dl = min(_dls) if _dls else None
                 if dl is None:
                     state.pop("cert_warn", None)
                 else:

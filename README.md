@@ -3,7 +3,7 @@
 **Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.12.0-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.13.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -97,14 +97,30 @@ Im Admin-GUI unter **„Domains & Zertifikate"**:
   verhindert ein doppeltes Präfix, wenn der Pfad schon mit dem Ziel beginnt. Optional
   `root=/ziel` ergänzen (`host /wiki keep root=/wiki/home`), um „/" der Alias-Domain
   getrennt vom Pfad-Erhalt auf ein eigenes Ziel zu leiten.
-- **Zusätzliche Zertifikate (SNI):** neben dem primären Zertifikat (in `certs/`)
-  weitere hochladen (Zertifikat + Schlüssel oder ein kombiniertes PEM). HAProxy wählt
-  anhand SNI. Angezeigt werden Subject, Aussteller, SANs und Ablauf; **private
-  Schlüssel werden nie angezeigt oder ausgeliefert**. Vor jedem Reload validiert
-  HAProxy die Config (`haproxy -c`) – fehlerhafte Zertifikate werden abgelehnt, die
-  laufende Config bleibt aktiv.
+- **Plattform-Zertifikat (Standard):** das Standard-Zertifikat des HTTPS-Frontends
+  wird mit Subject, SANs, Aussteller, Ablauf und SHA-256-Fingerprint angezeigt – samt
+  Quelle (im GUI hochgeladen / Datei in `certs/` / automatisch selbstsigniert). Es
+  lässt sich hier **ohne Container-Neustart austauschen** (Zertifikat + Schlüssel
+  hochladen): HAProxy wird per Reload aktualisiert, die vorherige Fassung bleibt als
+  Sicherung und ist per Klick **wiederherstellbar**. Der private Schlüssel wird nie
+  angezeigt. Passt der Schlüssel nicht zum Zertifikat oder ist es ungültig, wird der
+  Upload abgelehnt und die laufende Config bleibt aktiv. Der klassische Weg über
+  `certs/` auf dem Host bleibt als Alternative erhalten.
+- **Zusätzliche Zertifikate (SNI):** neben dem Plattform-Zertifikat weitere hochladen
+  (Zertifikat + Schlüssel oder ein kombiniertes PEM). HAProxy wählt anhand SNI.
+  Angezeigt werden Subject, Aussteller, SANs und Ablauf; **private Schlüssel werden
+  nie angezeigt oder ausgeliefert**. Vor jedem Reload validiert HAProxy die Config
+  (`haproxy -c`) – fehlerhafte Zertifikate werden abgelehnt, die laufende Config
+  bleibt aktiv.
+  > **Vorrang:** Deckt ein hochgeladenes SNI-Zertifikat **denselben Namen** ab wie
+  > das Plattform-Zertifikat, wird für diesen Namen das **SNI-Zertifikat** ausgeliefert
+  > (die SNI-Zertifikate stehen in der Bind-Zeile vor dem Plattform-Zertifikat). So
+  > lässt sich z. B. ein Zertifikat einer internen CA für die Plattform-Domain gezielt
+  > einsetzen. Für Namen, die nur das Plattform-Zertifikat abdeckt, bleibt dieses
+  > zuständig.
 - **Ablaufwarnung:** der Benachrichtigungs-Monitor meldet 30/14/7 Tage vor Ablauf
-  (Ereignis „Zertifikat läuft ab“, per E-Mail/Webhook).
+  (Ereignis „Zertifikat läuft ab“, per E-Mail/Webhook) – über **alle** SNI-Zertifikate
+  **und** das Plattform-Zertifikat.
 
 **Interne CA:** Zertifikat + Zwischenkette als PEM ablegen (primär in `certs/` oder
 zusätzlich hochladen) und die Root-CA auf den Clients verteilen (z. B. per GPO).

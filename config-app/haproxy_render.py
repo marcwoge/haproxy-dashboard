@@ -315,7 +315,8 @@ def _real_ip_line() -> str:
             f"if {{ src {' '.join(cidrs)} }}")
 
 
-def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None) -> str:
+def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None,
+           platform_crt: str = CERT_PEM, platform_fp: str = "") -> str:
     all_services = config.get("services", [])
     trust_cas = sorted(trust_cas or [])   # #21: nur fuer den cfg-Hash (Reload-Trigger)
     domain = str(config.get("domain", "")).strip()
@@ -489,11 +490,23 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None)
         A("    http-request redirect scheme https code 301 unless { ssl_fc }")
         A("")
         A("frontend fe_https")
-        bind = f"    bind :443 ssl crt {CERT_PEM}"
+        # #27: Fingerprint des Plattform-Zertifikats als Kommentar -> ein Austausch
+        # im GUI aendert den cfg-Hash und loest so den Watcher-Reload aus (ohne
+        # Container-Neustart liest HAProxy die crt-Datei beim Reload neu ein).
+        if platform_fp:
+            A(f"    # Plattform-Zertifikat (SHA256): {platform_fp}")
+        # #9/#27: hochgeladene SNI-Zertifikate ZUERST, Plattform-Zertifikat ZULETZT.
+        # HAProxy nimmt bei gleichem Namen das zuerst gelistete Zertifikat -> ein
+        # hochgeladenes Zertifikat gewinnt gegen das Plattform-Zertifikat (kein
+        # "verdecktes" Zertifikat mehr, #27). Fuer Namen, die nur das Plattform-
+        # Zertifikat abdeckt, bleibt dieses zustaendig.
         if extra_certs:
-            # #9: zusaetzliche Zertifikate per SNI (Kommentar -> cfg-Hash-Change).
-            A("    # SNI-Zertifikate: " + ", ".join(extra_certs))
-            bind += f" crt {EXTRA_CERT_DIR}"
+            A("    # SNI-Zertifikate (Vorrang vor dem Plattform-Zertifikat): "
+              + ", ".join(extra_certs))
+        bind = "    bind :443 ssl"
+        for c in extra_certs:
+            bind += f" crt {EXTRA_CERT_DIR}/{c}"
+        bind += f" crt {platform_crt}"
         A(bind + " alpn h2,http/1.1")
         _emit_routing_body(tls=True)
         A("")
@@ -615,7 +628,7 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None)
         A(f"frontend fe_{sid} from tcp")
         bind = f"    bind :{port}"
         if st.get("tls"):
-            bind += f" ssl crt {CERT_PEM}"     # TLS-Terminierung (Plattform-Zertifikat)
+            bind += f" ssl crt {platform_crt}"  # TLS-Terminierung (Plattform-Zertifikat)
         A(bind)
         if st.get("clitcpka"):
             A("    option clitcpka")            # Client-TCP-Keepalive
