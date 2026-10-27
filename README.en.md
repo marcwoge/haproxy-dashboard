@@ -3,7 +3,7 @@
 **Language / Sprache:** English (this document) · [Deutsch](README.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.15.3-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.16.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -158,6 +158,18 @@ The counterpart to the front side: to have HAProxy verify an **https backend**
 This verifies, e.g., an internal target with a self-signed cert or a service whose
 cert comes from the corporate PKI, instead of talking to it unverified with
 `verify SSL` off. Expiry warning as with the SNI certificates.
+
+**Backend by IP, certificate on a name (TLS server name):** many internal services have
+a certificate issued to a name (e.g. `app1.local`) but are reached by **IP** (the name is
+not in DNS). Verification then fails because HAProxy checks against the IP. Set the
+**"TLS server name / verify name"** field on the service (e.g. `app1.local`): the address
+stays the IP (the connection target), but verification is done against the name
+(`sni`/`check-sni`/`verifyhost`). Applies to multiple servers, all backend-CA variants and
+the health checks of external link tiles. Empty = unchanged (name derived from the address).
+> Note: `extra_hosts` in Compose does **not** work as name resolution for backends –
+> services with a name use the Docker resolver (`127.0.0.11`), which does not know
+> `extra_hosts`. For "reach by IP, verify against a name", the TLS server name is the
+> correct approach.
 
 ### Behind a proxy/tunnel (real client IP)
 

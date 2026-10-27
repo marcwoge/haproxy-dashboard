@@ -187,6 +187,10 @@
         </select>
       </label>
       <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.backend_ca_hint') }}</p>
+      <label>{{ t('svc.f_tls_server_name') }}
+        <input name="tls_server_name" value="{{ e.tls_server_name or '' }}" placeholder="app1.local">
+      </label>
+      <p class="upd-hint" style="grid-column:1/-1; margin-top:-.3rem;">{{ t('svc.tls_server_name_hint') }}</p>
       <label class="check">
         <input type="checkbox" name="strip_path" {{ 'checked' if e.strip_path }}>
         {{ t('svc.f_strip') }}

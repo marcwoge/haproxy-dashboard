@@ -3,7 +3,7 @@
 **Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.15.3-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.16.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -162,6 +162,19 @@ Das Gegenstück zur Frontend-Seite: Soll HAProxy ein **https-Backend** verifizie
 So wird z. B. ein internes Ziel mit self-signed Cert oder ein Dienst mit einem Cert
 aus der Firmen-PKI **verifiziert** statt nur mit `SSL-Prüfung aus` ungeprüft
 angesprochen. Ablaufwarnung wie bei den SNI-Zertifikaten.
+
+**Backend per IP, Zertifikat auf einen Namen (TLS-Servername):** Viele interne Dienste
+haben ein Zertifikat auf einen Namen (z. B. `app1.local`), werden aber per **IP**
+angesprochen (Name nicht im DNS). Dann schlägt die Prüfung fehl, weil HAProxy gegen die
+IP prüft. Feld **„TLS-Servername / Prüfname“** am Dienst setzen (z. B. `app1.local`):
+Die Adresse bleibt die IP (Verbindungsziel), geprüft wird aber gegen den Namen
+(`sni`/`check-sni`/`verifyhost`). Gilt für mehrere Server, alle Backend-CA-Varianten und
+die Health-Checks externer Link-Kacheln. Leer = Verhalten wie bisher (Name aus der
+Adresse).
+> Hinweis: `extra_hosts` in der Compose taugt **nicht** als Namensauflösung für
+> Backends – Dienste mit Namen nutzen den Docker-Resolver (`127.0.0.11`), der
+> `extra_hosts` nicht kennt. Für „per IP ansprechen, gegen Namen prüfen“ ist der
+> TLS-Servername der richtige Weg.
 
 ### Hinter einem Proxy/Tunnel (echte Client-IP)
 
