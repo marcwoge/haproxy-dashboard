@@ -118,6 +118,19 @@ Im Admin-GUI unter **„Domains & Zertifikate"**:
   > lässt sich z. B. ein Zertifikat einer internen CA für die Plattform-Domain gezielt
   > einsetzen. Für Namen, die nur das Plattform-Zertifikat abdeckt, bleibt dieses
   > zuständig.
+- **Formate & passwortgeschützte Schlüssel:** Upload (Plattform- wie SNI-Zertifikat)
+  akzeptiert Zertifikate als PEM oder DER (`.cer`) und Schlüssel als PEM (PKCS#1/PKCS#8,
+  unverschlüsselt oder mit 3DES/AES verschlüsselt). Alternativ **PKCS#12** (`.pfx`/`.p12`)
+  als **eine** Datei – Zertifikat, Kette und Schlüssel werden daraus entnommen, auch bei
+  älterer (Legacy-)Verschlüsselung. Für einen verschlüsselten Schlüssel bzw. eine `.pfx`
+  das Feld **„Passphrase"** ausfüllen; sie dient nur zum Entschlüsseln beim Upload, wird
+  **nicht gespeichert und nicht protokolliert**. Abgelegt wird immer ein kombiniertes PEM
+  mit **unverschlüsseltem** Schlüssel (`0600`) – HAProxy selbst kann verschlüsselte
+  Schlüssel nicht laden. Fehlt die Passphrase oder ist sie falsch, wird der Upload mit
+  klarer Meldung abgelehnt und nichts gespeichert.
+  > **Windows:** In der Zertifikatsverwaltung (`certmgr.msc`) → *Alle Aufgaben → Exportieren
+  > → Ja, privaten Schlüssel exportieren → PFX* mit Kennwort exportieren und die `.pfx`
+  > direkt hochladen (Kennwort ins Passphrase-Feld). Kein manuelles Entschlüsseln nötig.
 - **Ablaufwarnung:** der Benachrichtigungs-Monitor meldet 30/14/7 Tage vor Ablauf
   (Ereignis „Zertifikat läuft ab“, per E-Mail/Webhook) – über **alle** SNI-Zertifikate
   **und** das Plattform-Zertifikat.

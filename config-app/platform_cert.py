@@ -22,9 +22,9 @@ import os
 from pathlib import Path
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.primitives import hashes
 
+import cert_common
 from certs import CERTS_DIR
 
 _log = logging.getLogger("config-app")
@@ -158,50 +158,18 @@ def has_backup() -> bool:
     return BACKUP.is_file()
 
 
-def _cert_pem_chain(data: bytes) -> bytes:
-    """Zertifikatskette als PEM zurueckgeben (DER -> PEM konvertieren)."""
-    if b"-----BEGIN CERTIFICATE-----" in data:
-        return data.strip() + b"\n"   # PEM (Leaf [+ Kette]) unveraendert uebernehmen
-    cert = x509.load_der_x509_certificate(data)
-    return cert.public_bytes(serialization.Encoding.PEM)
-
-
-def save(cert_bytes: bytes, key_bytes: bytes, passphrase: bytes | None = None) -> tuple:
-    """Plattform-Zertifikat austauschen. Prueft: Zertifikat parsebar, Schluessel
-    (ggf. mit Passphrase) ladbar, Schluessel passt zum Zertifikat. Erst dann wird
-    das kombinierte PEM atomar geschrieben (0600); die vorherige Fassung wandert
-    nach .bak. Liefert (ok, flash-key). Bei Fehler bleibt alles unveraendert."""
-    cert_bytes = cert_bytes or b""
-    key_bytes = key_bytes or b""
-    if not cert_bytes or not key_bytes:
-        return False, "flash.cert_need_both"
-    # 1) Zertifikat (Leaf) laden
-    try:
-        leaf = _load_cert(cert_bytes)
-    except Exception:  # noqa: BLE001
-        return False, "flash.cert_invalid"
-    # 2) Privaten Schluessel laden (PEM, ggf. verschluesselt mit Passphrase)
-    try:
-        key = load_pem_private_key(key_bytes, password=passphrase)
-    except (TypeError, ValueError):
-        # TypeError: Passphrase fehlt/ueberfluessig; ValueError: falsch/defekt.
-        return False, "flash.cert_key_passphrase"
-    # 3) Schluessel muss zum Zertifikat passen
-    try:
-        pub_cert = leaf.public_key().public_bytes(
-            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-        pub_key = key.public_key().public_bytes(
-            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
-    except Exception:  # noqa: BLE001
-        return False, "flash.cert_invalid"
-    if pub_cert != pub_key:
-        return False, "flash.cert_key_mismatch"
-    # 4) Kombiniertes PEM bauen: Kette zuerst, dann UNVERSCHLUESSELTER Schluessel
-    key_pem = key.private_bytes(serialization.Encoding.PEM,
-                                serialization.PrivateFormat.PKCS8,
-                                serialization.NoEncryption())
-    combined = _cert_pem_chain(cert_bytes) + key_pem
-    # 5) Atomar schreiben, vorherige Fassung sichern
+def save(cert_bytes: bytes, key_bytes: bytes, passphrase: bytes | None = None,
+         filename: str = "") -> tuple:
+    """Plattform-Zertifikat austauschen. Die Eingabe (PEM/DER/PKCS#12, Schluessel
+    ggf. passwortgeschuetzt - #28) wird in cert_common zu einem kombinierten PEM mit
+    UNVERSCHLUESSELTEM Schluessel normalisiert und dabei validiert (parsebar,
+    Schluessel passt zum Zertifikat). Erst dann wird atomar geschrieben (0600); die
+    vorherige Fassung wandert nach .bak. Bei Fehler bleibt alles unveraendert."""
+    ok, result = cert_common.build_combined_pem(cert_bytes, key_bytes, passphrase, filename)
+    if not ok:
+        return False, result
+    combined = result
+    # Atomar schreiben, vorherige Fassung sichern
     try:
         CERTS_DIR.mkdir(parents=True, exist_ok=True)
         tmp = MANAGED.with_suffix(".pem.new")

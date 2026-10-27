@@ -1369,7 +1369,11 @@ def admin_cert_upload():
         flash(t("flash.cert_need_both"), "error")
         return redirect(url_for("admin") + "#domains")
     key_bytes = key_f.read() if key_f and key_f.filename else b""
-    ok, info = certs.save_cert(cert_f.filename, cert_f.read(), key_bytes)
+    # #28: optionale Passphrase (verschluesselter Schluessel / PKCS#12). Nur zum
+    # Entschluesseln beim Upload - wird nicht gespeichert und nicht geloggt.
+    passphrase = (request.form.get("passphrase") or "").encode("utf-8") or None
+    ok, info = certs.save_cert(cert_f.filename, cert_f.read(), key_bytes, passphrase=passphrase)
+    passphrase = None
     if ok:
         regenerate(load_config())          # cfg-Hash aendert sich -> Watcher reload
         _log.info("Zertifikat hinzugefuegt: %s", info)
@@ -1400,11 +1404,14 @@ def admin_platform_cert():
     t = _t()
     cert_f = request.files.get("cert_file")
     key_f = request.files.get("key_file")
-    if not cert_f or not cert_f.filename or not key_f or not key_f.filename:
+    if not cert_f or not cert_f.filename:
         flash(t("flash.cert_need_both"), "error")
         return redirect(url_for("admin") + "#domains")
+    # #28: Schluessel optional - bei PKCS#12 (.pfx/.p12) steckt er in der Cert-Datei.
+    key_bytes = key_f.read() if key_f and key_f.filename else b""
     passphrase = (request.form.get("passphrase") or "").encode("utf-8") or None
-    ok, info = platform_cert.save(cert_f.read(), key_f.read(), passphrase=passphrase)
+    ok, info = platform_cert.save(cert_f.read(), key_bytes, passphrase=passphrase,
+                                  filename=cert_f.filename)
     # Passphrase nicht im Speicher halten / nicht loggen.
     passphrase = None
     if ok:
