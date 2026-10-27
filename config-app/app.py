@@ -8,6 +8,7 @@ import base64
 import csv
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -79,6 +80,13 @@ CONNECTOR_TOKEN = _secret("CONNECTOR_TOKEN", "")
 # MUSS groesser als der Connector-HEARTBEAT sein (dort Default 60s), sonst wuerden
 # lebende Eintraege zwischen zwei Heartbeats faelschlich entfernt.
 CONNECTOR_TTL = int(os.environ.get("CONNECTOR_TTL", "180"))
+# #30: optionale Allowlist fuer Connector-Backends gegen SSRF. Leer = unveraendert
+# (das Maschinen-Token gilt als vertrauenswuerdige Infrastruktur). Gesetzt: die
+# Auto-Registrierung akzeptiert ein Backend nur, wenn dessen Host zu einem Eintrag
+# passt. Eintraege (komma-/leerzeichengetrennt): exakter Host (app1), Wildcard-Suffix
+# (*.internal), IP, CIDR (10.0.0.0/8) - optional mit Port-Pin (app1:8080). Betrifft
+# NUR die Connector-API; die menschliche Admin-GUI bleibt unbeschraenkt.
+CONNECTOR_BACKEND_ALLOWLIST = os.environ.get("CONNECTOR_BACKEND_ALLOWLIST", "")
 
 # H1: bekannte triviale Passwoerter, die (falls gesetzt) laut angemahnt werden.
 WEAK_PASSWORDS = {
@@ -755,6 +763,78 @@ _RE_EXPECT = re.compile(r"^[0-9|]{1,40}$")
 _RE_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 # E4: HTTP-Header-Name (Token-Zeichen).
 _RE_HDR = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+
+
+# --- #30: Connector-Backend-Allowlist (SSRF) --------------------------------
+def _split_host_port(s: str) -> tuple:
+    """'host:port' / '[ipv6]:port' / 'host' / bare IPv6 -> (host_lower, port|None)."""
+    s = s.strip()
+    if s.startswith("["):                       # [ipv6] oder [ipv6]:port
+        host, _, rest = s[1:].partition("]")
+        port = rest[1:] if rest.startswith(":") else ""
+    elif s.count(":") == 1:                      # host:port (IPv4/Hostname)
+        host, _, port = s.partition(":")
+    else:                                        # Hostname ohne Port oder nackte IPv6
+        host, port = s, ""
+    return host.strip().lower(), (int(port) if port.isdigit() else None)
+
+
+def _parse_backend_allowlist(raw: str) -> list:
+    """CONNECTOR_BACKEND_ALLOWLIST -> Liste von Matcher-Dicts. Ungueltige Eintraege
+    werden uebersprungen (mit Warnung), damit ein Tippfehler die API nicht lahmlegt."""
+    entries = []
+    for tok in re.split(r"[,\s]+", (raw or "").strip()):
+        if not tok:
+            continue
+        if "/" in tok:                           # CIDR-Netz
+            try:
+                entries.append({"net": ipaddress.ip_network(tok, strict=False), "port": None})
+            except ValueError:
+                _log.warning("CONNECTOR_BACKEND_ALLOWLIST: ungueltiges Netz %r ignoriert", tok)
+            continue
+        host, port = _split_host_port(tok)
+        if not host:
+            continue
+        if host.startswith("*."):                # Wildcard-Suffix
+            entries.append({"suffix": host[1:], "port": port})   # ".internal"
+            continue
+        try:                                     # exakte IP?
+            entries.append({"ip": ipaddress.ip_address(host), "port": port})
+        except ValueError:                       # exakter Hostname
+            entries.append({"host": host, "port": port})
+    return entries
+
+
+_BACKEND_ALLOWLIST = _parse_backend_allowlist(CONNECTOR_BACKEND_ALLOWLIST)
+
+
+def backend_allowed(backend: str) -> bool:
+    """True, wenn das Backend zugelassen ist. Leere Allowlist = alles erlaubt
+    (opt-in). Betrifft nur die Connector-Auto-Registrierung (#30)."""
+    if not _BACKEND_ALLOWLIST:
+        return True
+    host, port = _split_host_port(backend)
+    if not host:
+        return False
+    try:
+        bip = ipaddress.ip_address(host)
+    except ValueError:
+        bip = None
+    for e in _BACKEND_ALLOWLIST:
+        if e["port"] is not None and e["port"] != port:
+            continue                             # Port-Pin erfuellt?
+        if "net" in e:
+            if bip is not None and bip in e["net"]:
+                return True
+        elif "suffix" in e:
+            if host.endswith(e["suffix"]):
+                return True
+        elif "ip" in e:
+            if bip is not None and bip == e["ip"]:
+                return True
+        elif host == e["host"]:
+            return True
+    return False
 
 
 def _parse_aliases(raw: str) -> list:
@@ -1501,6 +1581,11 @@ def _service_from_json(data: dict) -> dict:
         "path": _norm_path(str(data.get("path", ""))),
         "backend": _s("backend"),
         "scheme": (str(data.get("scheme", "http")).strip().lower() or "http"),
+        # Default "" (Plattform-Standard) - ohne diesen Default lehnt validate_service
+        # jede Connector-Registrierung ab (backend_ca None, seit #21). Ein Connector
+        # darf aber public/internal/custom anfordern; ungueltige Werte weist die
+        # Validierung weiterhin ab.
+        "backend_ca": str(data.get("backend_ca", "")).strip().lower(),
         "ssl_verify": bool(data.get("ssl_verify", False)),
         "strip_path": bool(data.get("strip_path", False)),
         "icon": _s("icon"),
@@ -1566,6 +1651,14 @@ def api_register():
         return _json_error("validation_failed", 400, fields=errors)
 
     actor = _connector_actor(data)
+    # #30: SSRF-Schutz - Backend-Ziel gegen die optionale Allowlist pruefen. Leer =
+    # alles erlaubt. Abgelehnt: nichts wird geschrieben, laufende Config bleibt.
+    if not backend_allowed(svc["backend"]):
+        updater.audit(actor, "CONNECTOR_REGISTER_BLOCKED",
+                      f"path={svc['path']} backend={svc['backend']} (nicht auf Allowlist)")
+        _log.warning("Connector: Backend %s abgelehnt (nicht auf CONNECTOR_BACKEND_ALLOWLIST)",
+                     svc["backend"])
+        return _json_error("backend_not_allowed", 403, backend=svc["backend"])
     with _api_lock:
         cfg = load_config()
         idx = next((i for i, s in enumerate(cfg["services"])
@@ -1754,6 +1847,12 @@ if __name__ == "__main__":
     threading.Thread(target=_notify_monitor, name="notify-monitor", daemon=True).start()
     if CONNECTOR_TOKEN:
         _log.info("Platform-Connector-API aktiv (/api/v1/register, /deregister, /health)")
+        if _BACKEND_ALLOWLIST:
+            _log.info("Connector-Backend-Allowlist aktiv (%d Eintraege) - SSRF-Schutz an",
+                      len(_BACKEND_ALLOWLIST))
+        else:
+            _log.info("Connector-Backend-Allowlist leer - alle gueltigen Backends erlaubt "
+                      "(CONNECTOR_BACKEND_ALLOWLIST zum Einschraenken setzen)")
         if CONNECTOR_TTL > 0:
             threading.Thread(target=_connector_reaper, name="connector-reaper", daemon=True).start()
     _log.info("config-app gestartet, bereit auf :5000")

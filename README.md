@@ -370,6 +370,14 @@ Alternativ der **`register`-Modus** (deine App tritt dem geteilten Netz bei, kei
 Extra-Hop). Alle Variablen, beide Modi und Details: siehe
 [`connector/README.md`](connector/README.md).
 
+> **SSRF-Härtung (optional):** Da ein Connector sein Backend-Ziel selbst meldet, kannst
+> du auf der Plattform mit **`CONNECTOR_BACKEND_ALLOWLIST`** einschränken, welche
+> Backends registriert werden dürfen (komma-/leerzeichengetrennt): exakter Host
+> (`app1`), Wildcard-Suffix (`*.internal`), IP, CIDR (`10.0.0.0/8`), optional mit
+> Port (`app1:8080`). Leer = alle gültigen Backends erlaubt (das Token gilt als
+> vertrauenswürdige Infrastruktur). Gilt nur für die Connector-API; das Admin-GUI
+> bleibt unbeschränkt.
+
 ---
 
 ## 4. Erscheinungsbild

@@ -102,3 +102,14 @@ networks:
 The connector needs network access to the platform and to be reachable by HAProxy
 by name — i.e. it (and, in register mode, your app) must join the external
 `acme-platform` network.
+
+## Backend allowlist (platform side)
+
+The platform can restrict which backends a connector is allowed to register, as a
+defense-in-depth measure against SSRF. If the operator sets
+`CONNECTOR_BACKEND_ALLOWLIST` on the platform, a `register` whose backend host is not
+on the list is rejected with HTTP `403 backend_not_allowed` and nothing is written.
+In `proxy` mode the registered backend is the connector itself
+(`CONNECTOR_HOST:LISTEN_PORT`), so the allowlist must cover that name/port; in
+`register` mode it must cover `SERVICE_TARGET`. An empty allowlist (the default)
+accepts any valid backend.
