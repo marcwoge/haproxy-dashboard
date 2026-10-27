@@ -284,6 +284,7 @@
   "flash.cert_bad_name": "Ungültiger Dateiname für das Zertifikat.",
   "flash.cert_key_mismatch": "Der private Schlüssel passt nicht zum Zertifikat.",
   "flash.cert_key_passphrase": "Schlüssel konnte nicht gelesen werden – Passphrase fehlt oder ist falsch.",
+  "flash.cert_key_cipher_unsupported": "Der private Schlüssel ist mit einem nicht unterstützten Verfahren verschlüsselt. Bitte als PKCS#12/PFX (.pfx) exportieren oder den Schlüssel mit 3DES oder AES neu verschlüsseln.",
   "flash.cert_write_failed": "Zertifikat konnte nicht gespeichert werden (Schreibfehler).",
   "flash.platform_cert_saved": "Plattform-Zertifikat ausgetauscht – ohne Neustart aktiv.",
   "flash.platform_cert_restored": "Vorherige Fassung des Plattform-Zertifikats wiederhergestellt.",

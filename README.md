@@ -3,7 +3,7 @@
 **Sprache / Language:** Deutsch (dieses Dokument) · [English](README.en.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.15.0-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.15.1-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -120,7 +120,7 @@ Im Admin-GUI unter **„Domains & Zertifikate"**:
   > zuständig.
 - **Formate & passwortgeschützte Schlüssel:** Upload (Plattform- wie SNI-Zertifikat)
   akzeptiert Zertifikate als PEM oder DER (`.cer`) und Schlüssel als PEM (PKCS#1/PKCS#8,
-  unverschlüsselt oder mit 3DES/AES verschlüsselt). Alternativ **PKCS#12** (`.pfx`/`.p12`)
+  unverschlüsselt oder mit 3DES/AES bzw. – aus älteren PKIs – DES-CBC verschlüsselt). Alternativ **PKCS#12** (`.pfx`/`.p12`)
   als **eine** Datei – Zertifikat, Kette und Schlüssel werden daraus entnommen, auch bei
   älterer (Legacy-)Verschlüsselung. Für einen verschlüsselten Schlüssel bzw. eine `.pfx`
   das Feld **„Passphrase"** ausfüllen; sie dient nur zum Entschlüsseln beim Upload, wird
@@ -131,6 +131,9 @@ Im Admin-GUI unter **„Domains & Zertifikate"**:
   > **Windows:** In der Zertifikatsverwaltung (`certmgr.msc`) → *Alle Aufgaben → Exportieren
   > → Ja, privaten Schlüssel exportieren → PFX* mit Kennwort exportieren und die `.pfx`
   > direkt hochladen (Kennwort ins Passphrase-Feld). Kein manuelles Entschlüsseln nötig.
+  > Ist ein Schlüssel mit einem **anderen, nicht unterstützten Verfahren** verschlüsselt,
+  > ihn einmalig in ein PFX umpacken: `openssl pkcs12 -export -provider legacy -provider
+  > default -in cert.pem -inkey key.pem -out cert.pfx`.
 - **Ablaufwarnung:** der Benachrichtigungs-Monitor meldet 30/14/7 Tage vor Ablauf
   (Ereignis „Zertifikat läuft ab“, per E-Mail/Webhook) – über **alle** SNI-Zertifikate
   **und** das Plattform-Zertifikat.
