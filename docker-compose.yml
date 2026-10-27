@@ -56,6 +56,10 @@ services:
       - ./data/config:/app/config
       # generated haproxy.cfg (shared with the haproxy container)
       - ./data/haproxy:/app/haproxy_out
+      # #27: host platform certificate (certs/) read-only, so the admin GUI can show
+      # its metadata/expiry even when it is not managed in the GUI. A GUI-uploaded
+      # platform cert is stored under ./data/config/certs/ (shared with haproxy).
+      - ./certs:/app/platform-certs:ro
       # update request/result/audit - host bind so the HOST-side updater
       # (systemd) can read the request. config-app ONLY writes a request here;
       # it has NO Docker socket and never runs Docker.

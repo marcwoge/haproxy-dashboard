@@ -96,13 +96,27 @@ In the admin GUI under **"Domains & certificates"**:
   prefix when the path already starts with the target. Optionally add `root=/target`
   (`host /wiki keep root=/wiki/home`) to send the alias domain's "/" to a dedicated
   target, independently of path preservation.
-- **Additional certificates (SNI):** besides the primary certificate (in `certs/`),
-  upload more (certificate + key, or a combined PEM). HAProxy selects by SNI. Subject,
-  issuer, SANs and expiry are shown; **private keys are never shown or served**.
-  Before every reload HAProxy validates the config (`haproxy -c`) – a broken
-  certificate is rejected and the running config stays active.
+- **Platform certificate (default):** the HTTPS frontend's default certificate is
+  shown with subject, SANs, issuer, expiry and SHA-256 fingerprint — including its
+  source (uploaded in the GUI / file in `certs/` / auto-generated self-signed). It can
+  be **replaced here without a container restart** (upload certificate + key): HAProxy
+  is updated via reload, the previous version is kept as a backup and can be **restored**
+  with one click. The private key is never shown. If the key does not match the
+  certificate or the certificate is invalid, the upload is rejected and the running
+  config stays active. The classic `certs/` path on the host remains as an alternative.
+- **Additional certificates (SNI):** besides the platform certificate, upload more
+  (certificate + key, or a combined PEM). HAProxy selects by SNI. Subject, issuer, SANs
+  and expiry are shown; **private keys are never shown or served**. Before every reload
+  HAProxy validates the config (`haproxy -c`) – a broken certificate is rejected and the
+  running config stays active.
+  > **Precedence:** if an uploaded SNI certificate covers the **same name** as the
+  > platform certificate, the **SNI certificate** is served for that name (SNI
+  > certificates are listed before the platform certificate on the bind line). This
+  > lets you deploy e.g. an internal-CA certificate for the platform domain. For names
+  > only the platform certificate covers, it stays in charge.
 - **Expiry warning:** the notification monitor alerts 30/14/7 days before expiry
-  (event "Certificate expiring", via email/webhook).
+  (event "Certificate expiring", via email/webhook) – across **all** SNI certificates
+  **and** the platform certificate.
 
 **Internal CA:** place the certificate + intermediate chain as a PEM (primary in
 `certs/` or uploaded additionally) and distribute the root CA to the clients (e.g. via

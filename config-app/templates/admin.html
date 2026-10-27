@@ -346,6 +346,61 @@
       </div>
     </form>
 
+    {# ----- #27: Plattform-Zertifikat (Standard-Zertifikat des HTTPS-Frontends) ----- #}
+    <h3 style="margin:1rem 0 .3rem;">{{ t('dc.platform_heading') }}</h3>
+    <p class="upd-hint">{{ t('dc.platform_intro') }}</p>
+    <table class="svc-table">
+      <tbody>
+        <tr><th style="text-align:left;width:11rem;">{{ t('dc.platform_source') }}</th>
+            <td>{{ t('dc.platform_src_' + platform_cert.source) }}</td></tr>
+      {% if platform_cert.ok %}
+        <tr><th style="text-align:left;">{{ t('dc.cert_subject') }}</th><td>{{ platform_cert.subject }}</td></tr>
+        <tr><th style="text-align:left;">{{ t('dc.cert_sans') }}</th><td><code>{{ platform_cert.sans | join(', ') }}</code></td></tr>
+        <tr><th style="text-align:left;">{{ t('dc.cert_issuer') }}</th><td>{{ platform_cert.issuer }}</td></tr>
+        <tr><th style="text-align:left;">{{ t('dc.cert_expiry') }}</th>
+            <td>
+              {% if platform_cert.days_left is not none %}
+                <span class="dot dot-{{ 'down' if platform_cert.days_left < 14 else 'up' }}"></span>
+                {% if platform_cert.days_left < 0 %}{{ t('dc.cert_expired') }}{% else %}{{ t('dc.cert_days', n=platform_cert.days_left) }}{% endif %}
+              {% else %}–{% endif %}
+            </td></tr>
+        <tr><th style="text-align:left;">{{ t('dc.platform_fingerprint') }}</th>
+            <td><code style="font-size:.8em;word-break:break-all;">{{ platform_cert.fingerprint }}</code></td></tr>
+      {% else %}
+        <tr><td colspan="2" class="muted">{{ t('dc.platform_unreadable') }}</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('admin_platform_cert') }}" class="form-grid"
+          enctype="multipart/form-data" style="margin-top:.6rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>{{ t('dc.platform_cert_file') }}
+        <input name="cert_file" type="file" accept=".crt,.pem,.cer" required>
+      </label>
+      <label>{{ t('dc.platform_key_file') }}
+        <input name="key_file" type="file" accept=".key,.pem" required>
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.platform_replace_hint') }}</p>
+      <div class="full form-actions">
+        <button class="btn" type="submit">{{ t('dc.platform_replace') }}</button>
+      </div>
+    </form>
+    <div class="form-actions" style="margin-top:-.4rem;">
+      {% if platform_cert_backup %}
+      <form method="post" action="{{ url_for('admin_platform_cert_restore') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm" type="submit">{{ t('dc.platform_restore') }}</button>
+      </form>
+      {% endif %}
+      {% if platform_cert.source == 'managed' %}
+      <form method="post" action="{{ url_for('admin_platform_cert_delete') }}" style="display:inline;"
+            onsubmit="return confirm('{{ t('dc.platform_revert_confirm') }}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-danger" type="submit">{{ t('dc.platform_revert') }}</button>
+      </form>
+      {% endif %}
+    </div>
+
     <h3 style="margin:1rem 0 .3rem;">{{ t('dc.certs_heading') }}</h3>
     <p class="upd-hint">{{ t('dc.certs_intro') }}</p>
     <table class="svc-table">

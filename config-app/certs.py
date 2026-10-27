@@ -48,8 +48,12 @@ def _parse(path: Path) -> dict:
 
 
 def _pem_files() -> list:
+    # #27: "_platform.pem" ist das GUI-verwaltete Plattform-Zertifikat (eigene
+    # Verwaltung in platform_cert.py) - es gehoert NICHT in die SNI-Liste, sonst
+    # taucht es doppelt auf und landet unkontrolliert in der crt-Reihenfolge.
     try:
-        return sorted(p for p in CERTS_DIR.glob("*.pem") if p.is_file())
+        return sorted(p for p in CERTS_DIR.glob("*.pem")
+                      if p.is_file() and not p.name.startswith("_platform"))
     except OSError:
         return []
 
