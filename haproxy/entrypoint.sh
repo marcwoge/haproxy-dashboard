@@ -23,15 +23,16 @@ case "$ROTATE_AT" in ''|*[!0-9]*) ROTATE_AT=5000 ;; esac
 case "$KEEP_LINES" in ''|*[!0-9]*) KEEP_LINES=600 ;; esac
 
 mkdir -p /usr/local/etc/haproxy "$DYN" 2>/dev/null || true
-# #22: cap_drop ALL (kein CAP_DAC_OVERRIDE) -> root darf nur in EIGENE Verzeichnisse
-# schreiben. Gehoert der Bind-Mount data/haproxy einem anderen Benutzer, scheitert
-# der Start sonst kryptisch in einer Restart-Schleife -> hier klar melden.
+# #25: der Container laeuft als feste Non-Root-UID (1000). Gehoert der Bind-Mount
+# data/haproxy noch root (aeltere Installation) oder einem anderen Benutzer,
+# scheitert der Start sonst kryptisch in einer Restart-Schleife -> hier klar melden.
 if ! ( : > "$DYN/.write-test" ) 2>/dev/null; then
     echo "========================================================================" >&2
     echo "haproxy: kann nicht in $DYN schreiben (Bind-Mount data/haproxy)." >&2
-    echo "Die Container laufen als root, aber mit cap_drop: ALL (kein" >&2
-    echo "CAP_DAC_OVERRIDE) - root darf nur in EIGENE Verzeichnisse schreiben." >&2
-    echo "Loesung auf dem Host: sudo chown -R root:root data certs" >&2
+    echo "Die Container laufen als Non-Root (uid 1000) mit cap_drop: ALL." >&2
+    echo "Die gemounteten Verzeichnisse muessen dieser UID gehoeren." >&2
+    echo "Loesung auf dem Host: sudo chown -R 1000:1000 data certs" >&2
+    echo "(Der host-seitige Updater erledigt das beim Update automatisch.)" >&2
     echo "========================================================================" >&2
     exit 1
 fi

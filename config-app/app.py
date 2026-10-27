@@ -224,8 +224,8 @@ app.config.update(
 _lock = threading.Lock()
 
 def _preflight_dirs() -> None:
-    """#22: Mit cap_drop ALL (kein CAP_DAC_OVERRIDE) darf root nur in Verzeichnisse
-    schreiben, die ihm gehoeren. Gehoeren die Bind-Mounts einem anderen Benutzer,
+    """#25: der Container laeuft als feste Non-Root-UID (1000) mit cap_drop ALL.
+    Gehoeren die Bind-Mounts root (aeltere Installation) oder einem anderen Benutzer,
     scheitern Schreibzugriffe sonst mit einer kryptischen PermissionError in einer
     Restart-Schleife. Hier frueh klar melden und sauber beenden."""
     bad = []
@@ -241,11 +241,12 @@ def _preflight_dirs() -> None:
         print("\n".join([
             "", "=" * 72,
             "config-app kann nicht in die Datenverzeichnisse schreiben.",
-            "Die Container laufen als root, aber mit cap_drop: ALL (kein",
-            "CAP_DAC_OVERRIDE) - root darf nur in EIGENE Verzeichnisse schreiben.",
+            "Die Container laufen als Non-Root (uid 1000) mit cap_drop: ALL.",
+            "Die gemounteten Verzeichnisse muessen dieser UID gehoeren.",
             "Betroffen:", *bad, "",
-            "Loesung auf dem Host (data-/certs-Verzeichnisse root geben):",
-            "  sudo chown -R root:root data certs",
+            "Loesung auf dem Host (data-/certs-Verzeichnisse der App-UID geben):",
+            "  sudo chown -R 1000:1000 data certs",
+            "(Der host-seitige Updater erledigt das beim Update automatisch.)",
             "=" * 72, "",
         ]), file=sys.stderr, flush=True)
         sys.exit(1)
@@ -257,8 +258,8 @@ _preflight_dirs()
 HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
 
 # #16: Health-Check-Header-Secrets restriktiv halten. Falls der Secret-Ordner
-# existiert, auf 0700 setzen und enthaltene Dateien auf 0600 (Best-Effort; beide
-# Container laufen als root). Der Ordner wird vom Betreiber befuellt.
+# existiert, auf 0700 setzen und enthaltene Dateien auf 0600 (Best-Effort; die
+# Container laufen als Non-Root uid 1000). Der Ordner wird vom Betreiber befuellt.
 try:
     _sec = Path(HC_SECRET_DIR)
     if _sec.is_dir():
@@ -377,8 +378,8 @@ def regenerate(cfg: dict) -> None:
         f.write(text)
     # #16: die generierte Config enthaelt Geheimnisse (Health-Check-Header-Werte,
     # stats auth) im Klartext -> restriktiv (0600) schreiben. Beide Container laufen
-    # als root, der haproxy-Container liest sie also weiterhin. Der chmod VOR dem
-    # atomaren Replace vermeidet ein kurzes Fenster mit 0644.
+    # als dieselbe Non-Root-UID (1000), der haproxy-Container liest sie also
+    # weiterhin. Der chmod VOR dem atomaren Replace vermeidet ein Fenster mit 0644.
     try:
         os.chmod(tmp, 0o600)
     except OSError as e:

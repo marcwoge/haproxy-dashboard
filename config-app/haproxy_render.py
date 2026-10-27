@@ -273,13 +273,13 @@ def _hc_header(hc) -> str:
     try:
         val = (Path(HC_SECRET_DIR) / fname).read_text(encoding="utf-8").strip()
     except OSError as e:
-        # Haeufige Ursache: die Datei gehoert nicht root. Der Container laeuft als
-        # root, aber mit cap_drop ALL (kein CAP_DAC_OVERRIDE) -> er kann eine
-        # 0600-Datei nur lesen, wenn sie uid 0 gehoert. Sonst faellt der Header
-        # still weg und der Health-Check scheitert (z. B. 401 -> 503).
+        # Haeufige Ursache: die Datei gehoert nicht der App-UID. Der Container laeuft
+        # als Non-Root (uid 1000) mit cap_drop ALL (kein CAP_DAC_OVERRIDE) -> er kann
+        # eine 0600-Datei nur lesen, wenn sie uid 1000 gehoert. Sonst faellt der
+        # Header still weg und der Health-Check scheitert (z. B. 401 -> 503).
         _log.warning("Health-Check-Header %r: Secret-Datei %r im Secret-Verzeichnis "
                      "nicht lesbar (%s) -> Header wird weggelassen. Datei im Container "
-                     "lesbar machen (root:root, 0600).", name, fname, e)
+                     "lesbar machen (uid 1000, 0600).", name, fname, e)
         return ""
     # Steuerzeichen sowie " und \ wuerden das Quoting sprengen -> abweisen.
     if not val or any(ord(c) < 0x20 or ord(c) == 0x7f for c in val) \

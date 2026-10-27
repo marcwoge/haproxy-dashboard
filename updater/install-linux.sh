@@ -17,6 +17,15 @@ UPDATE_DIR="$PROJECT_DIR/data/update"
 
 echo "[install] Projektverzeichnis: $PROJECT_DIR"
 
+# 0) #25: die App-Container laufen als feste Non-Root-UID (1000). Die
+#    bind-gemounteten Zustands-Verzeichnisse muessen dieser UID gehoeren, sonst
+#    scheitert der Start. Anlegen + uebereignen (idempotent). MUSS vor dem
+#    append-only Audit-Log (Schritt 1) laufen, damit dessen root-Eigentum bleibt.
+mkdir -p "$PROJECT_DIR/data/config" "$PROJECT_DIR/data/haproxy" \
+         "$PROJECT_DIR/data/update" "$PROJECT_DIR/certs"
+chown -R 1000:1000 "$PROJECT_DIR/data" "$PROJECT_DIR/certs" 2>/dev/null || true
+echo "[install] data/ + certs/ gehoeren jetzt uid 1000 (Non-Root-Container)"
+
 # 1) Update-Verzeichnis + append-only HOST-Audit-Log vorbereiten (M7).
 #    Das Host-Audit ist die massgebliche, manipulationsgeschuetzte Spur:
 #    Nur der host-seitige Updater schreibt es. Dank chattr +a kann selbst der

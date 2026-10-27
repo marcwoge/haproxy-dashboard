@@ -57,14 +57,19 @@ Then in the browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
-> **Data directory ownership:** the containers run as `root` but hardened with
-> `cap_drop: ALL` (no `CAP_DAC_OVERRIDE`) – `root` may then only write into
-> directories it owns. If a deploy tool or a normal user creates the `data/` /
-> `certs/` folders, the containers won't start otherwise (they now print a clear
-> error). Fix it once on the host:
+> **Data directory ownership:** the containers run as a fixed **non-root UID `1000`**
+> (hardened with `cap_drop: ALL`). The bind-mounted `data/` / `certs/` folders must
+> therefore be owned by that UID, otherwise the containers won't start (they print a
+> clear error). Fix it once on the host:
 > ```bash
-> sudo chown -R root:root data certs
+> sudo chown -R 1000:1000 data certs
 > ```
+> The host-side updater and `updater/install-linux.sh` do this automatically; the
+> one-liner is only needed for manual installs / first starts.
+>
+> **Upgrading from ≤ v1.11 to ≥ v1.12:** there the containers still ran as `root`, so
+> `data/`/`certs/` are root-owned. Run the `chown` above once before first starting
+> the new images (in auto-update mode the updater handles it).
 
 ---
 
@@ -236,10 +241,10 @@ In the service form under **"Advanced (optional)"** (or directly in `services.ya
   a header (e.g. `Authorization`), only the **header name** is stored in the config;
   the **value** lives as a file under `data/config/secrets/<file>` and is read only
   when the config is generated – never stored in `services.yaml`. The file must be
-  **owned by `root`** (the containers run as root but with `cap_drop: ALL`, so they
-  cannot read files they don't own): `sudo install -o root -g root -m600 token
-  data/config/secrets/`. If it is unreadable, the header is dropped with a warning
-  in the log.
+  **owned by the app UID `1000`** (the containers run as non-root with `cap_drop:
+  ALL`, so they cannot read files they don't own): `sudo install -o 1000 -g 1000
+  -m600 token data/config/secrets/`. If it is unreadable, the header is dropped with
+  a warning in the log.
 - **Hide the tile** – the route stays active but no tile appears on the dashboard
   (`hidden`). For alias domains you can also set the target of "/" independently of
   path preservation (`root_to`, see domain aliases above).
