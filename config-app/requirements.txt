@@ -4,4 +4,4 @@ waitress==3.0.2
 dnspython==2.9.0
 # #27/#28: Zertifikats-Verwaltung (Schluessel<->Cert-Abgleich, Fingerprint,
 # verschluesselte Schluessel/PKCS#12/DER-Parsing). abi3-Wheel, kein Build noetig.
-cryptography==44.0.0
+cryptography==50.0.0
