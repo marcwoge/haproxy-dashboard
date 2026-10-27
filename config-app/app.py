@@ -684,6 +684,8 @@ def _service_from_form(form) -> dict:
         "hidden": form.get("hidden") == "on",
         # #19 externe Link-Kachel (verlinkt statt zu proxen); leer = normale Route
         "link_url": form.get("link_url", "").strip(),
+        # #24 Host-basiertes Routing (statt/zusaetzlich zum Pfad); leer = nur Pfad
+        "host": form.get("host", "").strip().lower(),
     }
     # E1 mehrere Server + Lastverteilung (optional; sonst das einzelne backend-Feld)
     servers = _parse_servers(form.get("servers", ""))
@@ -812,6 +814,8 @@ def validate_service(svc: dict) -> list:
         errors.append("flash.field_invalid_scheme")
     if svc.get("backend_ca") not in ("", "public", "internal", "custom"):   # Stufe 2 / #21
         errors.append("flash.field_invalid_backend_ca")
+    if svc.get("host") and not _RE_HOST.match(svc["host"]):   # #24 Host-Routing
+        errors.append("flash.field_invalid_host")
     color = svc.get("color", "")
     if color and not _RE_COLOR.match(color):
         errors.append("flash.field_invalid_color")
@@ -924,6 +928,12 @@ def _dashboard_services(cfg: dict):
             item["is_link"] = True
             item["href"] = s["link_url"].strip()
             item["link_host"] = parsed[1]
+        elif s.get("host"):
+            # #24: Host-Routing -> Kachel verlinkt auf den eigenen Host (neuer Tab).
+            h = str(s["host"]).strip().lower()
+            item["is_link"] = True
+            item["href"] = "https://" + h + "/"
+            item["link_host"] = h
         services.append(item)
     return services, show_status
 

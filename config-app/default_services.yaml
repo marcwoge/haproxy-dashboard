@@ -73,6 +73,9 @@ services:
     # E2 - path matching and extra paths routed to the same backend:
     # match: exact                    # exact (default) | prefix (path_beg, no trailing /)
     # extra_paths: [/api, /static]    # additional paths, no separate dashboard tile
+    # #24 - route by HOST header instead of/in addition to the path (no path prefix;
+    #       good for SPAs/WebSockets; combine with path to match host AND path):
+    # host: app.example.com
     # E5 - keep the route but hide the dashboard tile:
     # hidden: false
     # #19 - external LINK tile instead of a proxy route (opens in a new tab).

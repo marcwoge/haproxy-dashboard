@@ -139,6 +139,21 @@ REAL_IP_HEADER=CF-Connecting-IP
 TRUSTED_PROXIES=173.245.48.0/20 103.21.244.0/22   # your proxy's/tunnel's networks
 ```
 
+### Host-based routing & tunnel mode
+
+In addition to path routing, a service can be routed by **hostname**: fill the
+**"Host routing"** field in the service form with e.g. `app.example.com`. HAProxy
+then routes by the Host header — **without a path prefix** (ideal for SPAs, Django,
+WebSockets). Host and path can also be combined (this host **and** this path). This
+makes the platform a central entry point for several (sub)domains, e.g. behind a
+wildcard tunnel.
+
+**Tunnel mode (`FRONTEND_MODE=http`):** when an upstream tunnel (e.g. Cloudflare)
+already terminates TLS, HAProxy routes directly on **:80** — **no** HTTPS redirect
+and no own `:443`. Then publish `:80` (instead of `:443`) to the tunnel and usually
+set `REAL_IP_HEADER` (see above). The default stays `https` (HAProxy terminates TLS
+on :443 itself).
+
 ---
 
 ## 3. Adding a container as a tile

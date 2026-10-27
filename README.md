@@ -140,6 +140,21 @@ REAL_IP_HEADER=CF-Connecting-IP
 TRUSTED_PROXIES=173.245.48.0/20 103.21.244.0/22   # Netze deines Proxys/Tunnels
 ```
 
+### Host-basiertes Routing & Tunnel-Modus
+
+Zusätzlich zum Pfad-Routing kann ein Dienst nach **Hostname** geroutet werden:
+im Service-Formular das Feld **„Host-Routing“** mit z. B. `app.example.com` füllen.
+HAProxy leitet dann anhand des Host-Headers weiter – **ohne Pfad-Präfix** (ideal
+für SPAs, Django, WebSockets). Host und Pfad lassen sich auch kombinieren (nur
+dieser Host **und** dieser Pfad). So wird die Plattform zentraler Einstieg für
+mehrere (Sub-)Domains, z. B. hinter einem Wildcard-Tunnel.
+
+**Tunnel-Modus (`FRONTEND_MODE=http`):** Terminiert ein vorgelagerter Tunnel (z. B.
+Cloudflare) bereits TLS, routet HAProxy direkt auf **:80** – **ohne** HTTPS-Redirect
+und ohne eigenes `:443`. In der Compose dann `:80` (statt `:443`) an den Tunnel
+veröffentlichen und meist `REAL_IP_HEADER` setzen (siehe oben). Standard bleibt
+`https` (HAProxy terminiert selbst auf :443).
+
 ---
 
 ## 3. Einen Container als Kachel hinzufügen

@@ -38,6 +38,10 @@ services:
       # (e.g. CF-Connecting-IP). Both empty = off (no header is trusted).
       - REAL_IP_HEADER=${REAL_IP_HEADER:-}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+      # #24: frontend mode. "https" (default) = :80 redirects to :443, TLS on :443.
+      # "http" = TLS terminates upstream (e.g. a Cloudflare Tunnel) -> route directly
+      # on :80, no redirect. Then publish :80 (not :443) to the tunnel.
+      - FRONTEND_MODE=${FRONTEND_MODE:-https}
       # APP_VERSION is NOT set here - it is baked into the image (build arg),
       # so a pulled GHCR image reports its real release version.
       - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}

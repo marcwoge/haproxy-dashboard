@@ -148,6 +148,10 @@
       <label>{{ t('svc.f_path') }}
         <input name="path" value="{{ e.path or '' }}" placeholder="/abfallmanager">
       </label>
+      <label>{{ t('svc.f_host') }}
+        <input name="host" value="{{ e.host or '' }}" placeholder="app.example.com">
+      </label>
+      <p class="upd-hint full" style="margin-top:-.3rem;">{{ t('svc.f_host_hint') }}</p>
       <label>{{ t('svc.f_backend') }}
         <input name="backend" value="{{ e.backend or '' }}" placeholder="abfallmanager:8080">
       </label>
