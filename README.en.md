@@ -3,7 +3,7 @@
 **Language / Sprache:** English (this document) · [Deutsch](README.md)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Release](https://img.shields.io/badge/release-v1.13.0-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-v1.14.0-brightgreen.svg)
 ![HAProxy](https://img.shields.io/badge/proxy-HAProxy-cf3d1e.svg)
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ed.svg)
 
@@ -114,6 +114,18 @@ In the admin GUI under **"Domains & certificates"**:
   > certificates are listed before the platform certificate on the bind line). This
   > lets you deploy e.g. an internal-CA certificate for the platform domain. For names
   > only the platform certificate covers, it stays in charge.
+- **Formats & password-protected keys:** uploads (platform and SNI certificate) accept
+  certificates as PEM or DER (`.cer`) and keys as PEM (PKCS#1/PKCS#8, unencrypted or
+  encrypted with 3DES/AES). Alternatively a **PKCS#12** bundle (`.pfx`/`.p12`) as a
+  **single** file – certificate, chain and key are taken from it, including older
+  (legacy) encryption. For an encrypted key or a `.pfx`, fill in the **"Passphrase"**
+  field; it is used only to decrypt on upload and is **not stored and not logged**. What
+  gets written is always a combined PEM with an **unencrypted** key (`0600`) – HAProxy
+  itself cannot load encrypted keys. A missing or wrong passphrase is rejected with a
+  clear message and nothing is stored.
+  > **Windows:** in the certificate manager (`certmgr.msc`) → *All Tasks → Export → Yes,
+  > export the private key → PFX*, export with a password and upload the `.pfx` directly
+  > (password into the passphrase field). No manual decryption needed.
 - **Expiry warning:** the notification monitor alerts 30/14/7 days before expiry
   (event "Certificate expiring", via email/webhook) – across **all** SNI certificates
   **and** the platform certificate.

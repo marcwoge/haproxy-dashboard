@@ -375,12 +375,17 @@
           enctype="multipart/form-data" style="margin-top:.6rem;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>{{ t('dc.platform_cert_file') }}
-        <input name="cert_file" type="file" accept=".crt,.pem,.cer" required>
+        <input name="cert_file" type="file" accept=".crt,.pem,.cer,.pfx,.p12" required>
       </label>
       <label>{{ t('dc.platform_key_file') }}
-        <input name="key_file" type="file" accept=".key,.pem" required>
+        <input name="key_file" type="file" accept=".key,.pem">
+      </label>
+      <label>{{ t('dc.cert_passphrase') }}
+        <input name="passphrase" type="password" autocomplete="off" autocapitalize="off"
+               autocorrect="off" spellcheck="false">
       </label>
       <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.platform_replace_hint') }}</p>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.cert_passphrase_hint') }}</p>
       <div class="full form-actions">
         <button class="btn" type="submit">{{ t('dc.platform_replace') }}</button>
       </div>
@@ -435,11 +440,16 @@
           enctype="multipart/form-data" style="margin-top:.6rem;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>{{ t('dc.cert_file') }}
-        <input name="cert_file" type="file" accept=".crt,.pem,.cer" required>
+        <input name="cert_file" type="file" accept=".crt,.pem,.cer,.pfx,.p12" required>
       </label>
       <label>{{ t('dc.cert_key') }}
         <input name="key_file" type="file" accept=".key,.pem">
       </label>
+      <label>{{ t('dc.cert_passphrase') }}
+        <input name="passphrase" type="password" autocomplete="off" autocapitalize="off"
+               autocorrect="off" spellcheck="false">
+      </label>
+      <p class="upd-hint full" style="margin-top:-.4rem;">{{ t('dc.cert_passphrase_hint') }}</p>
       <div class="full form-actions">
         <button class="btn" type="submit">{{ t('dc.cert_upload') }}</button>
       </div>

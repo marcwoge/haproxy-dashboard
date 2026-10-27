@@ -14,10 +14,10 @@ from pathlib import Path
 
 from werkzeug.utils import secure_filename
 
+import cert_common
+
 CERTS_DIR = Path(os.environ.get("EXTRA_CERT_DIR_LOCAL", "/app/config/certs"))
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-_RE_CERT = re.compile(rb"-----BEGIN CERTIFICATE-----")
-_RE_KEY = re.compile(rb"-----BEGIN (?:RSA |EC |)PRIVATE KEY-----")
 
 
 def _flat(rdns):
@@ -74,18 +74,21 @@ def min_days_left():
     return min(vals) if vals else None
 
 
-def save_cert(name: str, cert_bytes: bytes, key_bytes: bytes = b"") -> tuple:
-    """Kombiniertes PEM (Cert[+Chain]+Key) speichern, 0600. Liefert (ok, info/key)."""
+def save_cert(name: str, cert_bytes: bytes, key_bytes: bytes = b"",
+              passphrase: bytes | None = None) -> tuple:
+    """SNI-Zertifikat speichern. Eingabe (PEM/DER/PKCS#12, Schluessel ggf.
+    passwortgeschuetzt - #28) wird in cert_common zu einem kombinierten PEM mit
+    UNVERSCHLUESSELTEM Schluessel normalisiert und validiert. 0600, atomar.
+    Liefert (ok, info/flash-key)."""
     base = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.splitext(os.path.basename(name or ""))[0]).strip("-.")
     # secure_filename als von CodeQL anerkannter Sanitizer gegen Path-Injection.
     fname = secure_filename((base or "cert") + ".pem")
     if not fname or not _SAFE_NAME.match(fname):
         return False, "flash.cert_bad_name"
-    data = cert_bytes or b""
-    if key_bytes:
-        data = data.rstrip() + b"\n" + key_bytes.lstrip()
-    if not _RE_CERT.search(data) or not _RE_KEY.search(data):
-        return False, "flash.cert_need_both"
+    ok, result = cert_common.build_combined_pem(cert_bytes, key_bytes, passphrase, filename=name)
+    if not ok:
+        return False, result
+    data = result
     CERTS_DIR.mkdir(parents=True, exist_ok=True)
     dest = CERTS_DIR / fname
     tmp = dest.with_suffix(".pem.tmp")
