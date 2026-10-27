@@ -40,6 +40,12 @@ SYSLOG_ADDRESS = os.environ.get("SYSLOG_ADDRESS", "").strip()
 # aus REAL_IP_HEADER (z. B. CF-Connecting-IP) uebernommen. Leer = aus (kein Spoofing).
 REAL_IP_HEADER = os.environ.get("REAL_IP_HEADER", "").strip()
 TRUSTED_PROXIES = os.environ.get("TRUSTED_PROXIES", "").strip()
+# #24: Frontend-Modus. "https" (Default): :80 -> 301 auf :443, TLS auf :443.
+# "http": TLS terminiert vorgelagert (z. B. Cloudflare Tunnel) -> Routing direkt
+# auf :80, kein Redirect, kein eigenes :443.
+FRONTEND_MODE = os.environ.get("FRONTEND_MODE", "https").strip().lower()
+if FRONTEND_MODE not in ("https", "http"):
+    FRONTEND_MODE = "https"
 _BALANCE = ("roundrobin", "leastconn")
 # Verzeichnis zusaetzlicher Zertifikate (SNI) IM haproxy-Container (Bind-Mount von
 # data/config/certs). HAProxy waehlt anhand SNI; leer -> nicht referenziert.
@@ -395,91 +401,114 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None)
         A("    stats realm HAProxy\\ Statistics")
         A(f"    stats auth {stats_auth}")
     A("")
-    A("# HTTP -> HTTPS Redirect (+ Alias-Domain-Redirects auf die Plattform)")
-    A("frontend fe_http")
-    A("    bind :80")
-    for ln in alias_lines:   # #8: Alias-Hosts direkt auf https://<platform> leiten
-        A(ln)
-    A("    http-request redirect scheme https code 301 unless { ssl_fc }")
-    A("")
-    A("frontend fe_https")
-    bind = f"    bind :443 ssl crt {CERT_PEM}"
-    if extra_certs:
-        # #9: zusaetzliche Zertifikate per SNI. Der Kommentar listet sie, damit sich
-        # der cfg-Hash bei Cert-Aenderungen aendert -> Watcher validiert + reload.
-        A("    # SNI-Zertifikate: " + ", ".join(extra_certs))
-        bind += f" crt {EXTRA_CERT_DIR}"
-    A(bind + " alpn h2,http/1.1")
-    # #23: echte Client-IP aus dem Proxy-/Tunnel-Header uebernehmen (nur aus
-    # vertrauenswuerdigen Netzen) - MUSS vor X-Client-IP/Rate-Limit stehen.
-    rip = _real_ip_line()
-    if rip:
-        A(rip)
-    A("    http-request set-header X-Forwarded-Proto https")
-    A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
-    # Echte Client-IP fuer das Rate-Limiting; set-header ueberschreibt Spoofing.
-    A("    http-request set-header X-Client-IP %[src]")
-    A("    http-request set-header X-Forwarded-Port %[dst_port]")   # E5
-    if max_to > 60:
-        A(f"    timeout client {max_to}s")   # #6: an laengstes Service-Timeout anpassen
-    if HSTS_ENABLED:
-        # N2: HSTS nur bei echtem Zertifikat (opt-in via ENABLE_HSTS=true).
-        A(f'    http-response set-header Strict-Transport-Security "max-age={HSTS_MAX_AGE}; includeSubDomains"')
-    for ln in alias_lines:   # #8: Alias-Hosts auch auf 443 auf die Plattform leiten
-        A(ln)
-    A("")
-
+    # ---- Routing-Regeln einmal bauen (frontend-unabhaengig) ----
+    # #24: Routing nach Pfad UND/ODER Host. ACLs + deny sammeln wir in route_lines,
+    # use_backend getrennt in ub_lines -> derselbe Body laesst sich in fe_https ODER
+    # (im Tunnel-/HTTP-Modus) in fe_http ausgeben.
     backends = []
+    route_lines = []
+    ub_lines = []
     for idx, s in enumerate(all_services):
         if not s.get("enabled", True):
             continue
         if _link_parse(s.get("link_url")):
-            continue   # #19: externe Link-Kachel -> keine Route (ACL/use_backend)
+            continue   # #19: externe Link-Kachel -> keine Route
         servers = _service_servers(s)      # E1: ein oder mehrere Backends
         if not servers:
             continue
         sid = _safe_id(s.get("name", "svc"), idx)
+        host = str(s.get("host") or "").strip().lower()       # #24: Host-Routing
+        if host and not _SAFE_HOST.match(host):
+            host = ""
         path = _norm_path(s.get("path", "/"))
-        if path == "/":
-            continue  # "/" ist dem Dashboard vorbehalten
-        if not _SAFE_PATH.match(path) or ".." in path:
-            A(f"    # uebersprungen (unsicherer Pfad): {_clean_comment(s.get('name', sid))}")
-            continue
-        A(f"    # {_clean_comment(s.get('name', sid))}")
-        # E2: Match-Art exact (Default) oder prefix (path_beg ohne abschliessendes /).
-        if (s.get("match") or "exact").lower() == "prefix":
-            A(f"    acl is_{sid} path_beg {path}")
-        else:
-            A(f"    acl is_{sid} path {path}")
-            A(f"    acl is_{sid} path_beg {path}/")
-        # E2: zusaetzliche Pfade auf dasselbe Backend (ohne eigene Kachel).
-        for ep in (s.get("extra_paths") or []):
-            epn = _norm_path(str(ep))
-            if epn != "/" and _SAFE_PATH.match(epn) and ".." not in epn:
-                A(f"    acl is_{sid} path {epn}")
-                A(f"    acl is_{sid} path_beg {epn}/")
-        # #7: gesperrte Unterpfade -> 403. http-request wird von HAProxy ohnehin
-        # vor use_backend verarbeitet; alle use_backend kommen daher gesammelt
-        # ans Ende (sonst warnt HAProxy "http-request after use_backend").
-        denies = _deny_list(path, s.get("deny_paths"))
-        if denies:
-            A(f"    http-request deny deny_status 403 if is_{sid} {{ path_beg {' '.join(denies)} }}")
-        backends.append((sid, s, path, servers))
+        has_path = path != "/" and bool(_SAFE_PATH.match(path)) and ".." not in path
+        if not host and not has_path:
+            if path != "/" and (not _SAFE_PATH.match(path) or ".." in path):
+                route_lines.append(f"    # uebersprungen (unsicherer Pfad): {_clean_comment(s.get('name', sid))}")
+            continue   # weder gueltiger Host noch nutzbarer Pfad ("/" = Dashboard)
+        route_lines.append(f"    # {_clean_comment(s.get('name', sid))}")
+        conds = []
+        if host:
+            route_lines.append(f"    acl host_{sid} hdr(host),field(1,:) -i {host}")
+            conds.append(f"host_{sid}")
+        if has_path:
+            # E2: Match-Art exact (Default) oder prefix (path_beg ohne abschliessendes /).
+            if (s.get("match") or "exact").lower() == "prefix":
+                route_lines.append(f"    acl is_{sid} path_beg {path}")
+            else:
+                route_lines.append(f"    acl is_{sid} path {path}")
+                route_lines.append(f"    acl is_{sid} path_beg {path}/")
+            for ep in (s.get("extra_paths") or []):   # E2: zusaetzliche Pfade
+                epn = _norm_path(str(ep))
+                if epn != "/" and _SAFE_PATH.match(epn) and ".." not in epn:
+                    route_lines.append(f"    acl is_{sid} path {epn}")
+                    route_lines.append(f"    acl is_{sid} path_beg {epn}/")
+            denies = _deny_list(path, s.get("deny_paths"))   # #7: 403 vor use_backend
+            if denies:
+                route_lines.append(f"    http-request deny deny_status 403 if is_{sid} {{ path_beg {' '.join(denies)} }}")
+            conds.append(f"is_{sid}")
+        ub_lines.append(f"    use_backend bk_{sid} if {' '.join(conds)}")
+        backends.append((sid, s, path, servers, has_path))
 
-    for sid, _s, _p, _sv in backends:
-        A(f"    use_backend bk_{sid} if is_{sid}")
-    A("    default_backend bk_dashboard")
-    A("")
+    def _emit_routing_body(tls: bool):
+        """Gemeinsamer Frontend-Body: Header, echte IP (#23), Aliase, ACLs, use_backend."""
+        rip = _real_ip_line()
+        if rip:
+            A(rip)   # #23: echte Client-IP VOR X-Client-IP/Rate-Limit
+        # Oeffentliches Schema ist https (TLS hier ODER am vorgelagerten Tunnel).
+        A("    http-request set-header X-Forwarded-Proto https")
+        A("    http-request set-header X-Forwarded-Host %[req.hdr(host)]")
+        A("    http-request set-header X-Client-IP %[src]")
+        A("    http-request set-header X-Forwarded-Port %[dst_port]")   # E5
+        if max_to > 60:
+            A(f"    timeout client {max_to}s")   # #6
+        if tls and HSTS_ENABLED:
+            A(f'    http-response set-header Strict-Transport-Security "max-age={HSTS_MAX_AGE}; includeSubDomains"')
+        for ln in alias_lines:   # #8
+            A(ln)
+        for ln in route_lines:   # ACLs + deny
+            A(ln)
+        for ln in ub_lines:      # use_backend gesammelt nach den http-request-Regeln
+            A(ln)
+        A("    default_backend bk_dashboard")
+
+    if FRONTEND_MODE == "http":
+        # #24: TLS terminiert vorgelagert (z. B. Cloudflare Tunnel) -> Routing direkt
+        # auf :80, KEIN HTTPS-Redirect, kein eigenes :443.
+        A("# HTTP-Modus: TLS terminiert vorgelagert (Tunnel) - Routing direkt auf :80")
+        A("frontend fe_http")
+        A("    bind :80")
+        _emit_routing_body(tls=False)
+        A("")
+    else:
+        A("# HTTP -> HTTPS Redirect (+ Alias-Domain-Redirects auf die Plattform)")
+        A("frontend fe_http")
+        A("    bind :80")
+        for ln in alias_lines:   # #8: Alias-Hosts direkt auf https leiten
+            A(ln)
+        A("    http-request redirect scheme https code 301 unless { ssl_fc }")
+        A("")
+        A("frontend fe_https")
+        bind = f"    bind :443 ssl crt {CERT_PEM}"
+        if extra_certs:
+            # #9: zusaetzliche Zertifikate per SNI (Kommentar -> cfg-Hash-Change).
+            A("    # SNI-Zertifikate: " + ", ".join(extra_certs))
+            bind += f" crt {EXTRA_CERT_DIR}"
+        A(bind + " alpn h2,http/1.1")
+        _emit_routing_body(tls=True)
+        A("")
+
     A("# Dashboard + Admin-GUI")
     A("backend bk_dashboard")
     A("    server dashboard config-app:5000 check inter 5s resolvers docker init-addr last,libc,none")
     A("")
 
-    for sid, s, path, servers in backends:
+    for sid, s, path, servers, has_path in backends:
         scheme = (s.get("scheme") or "http").lower()
         A(f"backend bk_{sid}")
-        if s.get("strip_path"):
-            # Prefix /xyz vor Weiterleitung entfernen -> Backend sieht / ...
+        if s.get("strip_path") and has_path:
+            # Prefix /xyz vor Weiterleitung entfernen -> Backend sieht / ... (nur
+            # bei Pfad-Routing sinnvoll; Host-Routing laesst den Pfad unveraendert).
             A(f"    http-request set-path %[path,regsub(^{path}/?,/)]")
 
         # E1: Lastverteilung nur bei mehreren Servern (Default roundrobin).
