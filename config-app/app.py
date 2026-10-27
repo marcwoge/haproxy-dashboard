@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import shutil
+import sys
 import threading
 import time
 import urllib.request
@@ -220,6 +221,36 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true",
 )
 _lock = threading.Lock()
+
+def _preflight_dirs() -> None:
+    """#22: Mit cap_drop ALL (kein CAP_DAC_OVERRIDE) darf root nur in Verzeichnisse
+    schreiben, die ihm gehoeren. Gehoeren die Bind-Mounts einem anderen Benutzer,
+    scheitern Schreibzugriffe sonst mit einer kryptischen PermissionError in einer
+    Restart-Schleife. Hier frueh klar melden und sauber beenden."""
+    bad = []
+    for label, d in (("CONFIG_DIR", CONFIG_DIR), ("HAPROXY_OUT", HAPROXY_OUT)):
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            probe = d / ".write-test"
+            probe.write_text("x", encoding="utf-8")
+            probe.unlink()
+        except OSError as e:
+            bad.append(f"  - {label}: {d}  ({e})")
+    if bad:
+        print("\n".join([
+            "", "=" * 72,
+            "config-app kann nicht in die Datenverzeichnisse schreiben.",
+            "Die Container laufen als root, aber mit cap_drop: ALL (kein",
+            "CAP_DAC_OVERRIDE) - root darf nur in EIGENE Verzeichnisse schreiben.",
+            "Betroffen:", *bad, "",
+            "Loesung auf dem Host (data-/certs-Verzeichnisse root geben):",
+            "  sudo chown -R root:root data certs",
+            "=" * 72, "",
+        ]), file=sys.stderr, flush=True)
+        sys.exit(1)
+
+
+_preflight_dirs()
 
 # Eigenes Logfile (zusaetzlich zu stdout), damit das Admin-GUI es anzeigen kann.
 HAPROXY_OUT.mkdir(parents=True, exist_ok=True)

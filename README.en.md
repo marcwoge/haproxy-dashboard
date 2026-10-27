@@ -57,6 +57,15 @@ Then in the browser:
 > `127.0.0.1   platform.example.local`
 > (Windows: `C:\Windows\System32\drivers\etc\hosts`)
 
+> **Data directory ownership:** the containers run as `root` but hardened with
+> `cap_drop: ALL` (no `CAP_DAC_OVERRIDE`) – `root` may then only write into
+> directories it owns. If a deploy tool or a normal user creates the `data/` /
+> `certs/` folders, the containers won't start otherwise (they now print a clear
+> error). Fix it once on the host:
+> ```bash
+> sudo chown -R root:root data certs
+> ```
+
 ---
 
 ## 2. Configuration
