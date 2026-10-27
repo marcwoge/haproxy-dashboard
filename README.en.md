@@ -116,7 +116,7 @@ In the admin GUI under **"Domains & certificates"**:
   > only the platform certificate covers, it stays in charge.
 - **Formats & password-protected keys:** uploads (platform and SNI certificate) accept
   certificates as PEM or DER (`.cer`) and keys as PEM (PKCS#1/PKCS#8, unencrypted or
-  encrypted with 3DES/AES). Alternatively a **PKCS#12** bundle (`.pfx`/`.p12`) as a
+  encrypted with 3DES/AES, or – from older PKIs – DES-CBC). Alternatively a **PKCS#12** bundle (`.pfx`/`.p12`) as a
   **single** file – certificate, chain and key are taken from it, including older
   (legacy) encryption. For an encrypted key or a `.pfx`, fill in the **"Passphrase"**
   field; it is used only to decrypt on upload and is **not stored and not logged**. What
@@ -126,6 +126,9 @@ In the admin GUI under **"Domains & certificates"**:
   > **Windows:** in the certificate manager (`certmgr.msc`) → *All Tasks → Export → Yes,
   > export the private key → PFX*, export with a password and upload the `.pfx` directly
   > (password into the passphrase field). No manual decryption needed.
+  > If a key is encrypted with a **different, unsupported algorithm**, repack it once into
+  > a PFX: `openssl pkcs12 -export -provider legacy -provider default -in cert.pem -inkey
+  > key.pem -out cert.pfx`.
 - **Expiry warning:** the notification monitor alerts 30/14/7 days before expiry
   (event "Certificate expiring", via email/webhook) – across **all** SNI certificates
   **and** the platform certificate.

@@ -284,6 +284,7 @@
   "flash.cert_bad_name": "Invalid file name for the certificate.",
   "flash.cert_key_mismatch": "The private key does not match the certificate.",
   "flash.cert_key_passphrase": "The key could not be read — passphrase missing or wrong.",
+  "flash.cert_key_cipher_unsupported": "The private key is encrypted with an unsupported algorithm. Please export it as PKCS#12/PFX (.pfx) or re-encrypt the key with 3DES or AES.",
   "flash.cert_write_failed": "The certificate could not be saved (write error).",
   "flash.platform_cert_saved": "Platform certificate replaced — active without a restart.",
   "flash.platform_cert_restored": "Previous version of the platform certificate restored.",
