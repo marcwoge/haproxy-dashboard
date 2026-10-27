@@ -101,6 +101,9 @@ services:
       # private keys live under data/step-ca/secrets and are NOT mounted here.
       # Empty when the CA profile is unused.
       - ./data/step-ca/certs:/certs-ca:ro
+      # #21: trusted backend CAs uploaded in the admin GUI (public certs only) -
+      # HAProxy verifies backends with backend_ca=custom against this bundle.
+      - ./data/config/ca:/certs-trust:ro
     # Lets you reach backends via a host-published port: enter the backend in the
     # GUI as "host.docker.internal:PORT". (Automatic on Docker Desktop; on Linux
     # this entry provides the required host-gateway resolution.)

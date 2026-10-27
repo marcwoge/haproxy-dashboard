@@ -35,6 +35,7 @@ import updater
 import notifier
 import i18n
 import certs
+import trust
 
 DEFAULT_LANG = os.environ.get("PLATFORM_LANG", "de")
 
@@ -369,7 +370,8 @@ def save_config(cfg: dict) -> None:
 
 def regenerate(cfg: dict) -> None:
     HAPROXY_OUT.mkdir(parents=True, exist_ok=True)
-    text = render_haproxy(cfg, stats_auth=STATS_AUTH, extra_certs=certs.cert_files())
+    text = render_haproxy(cfg, stats_auth=STATS_AUTH, extra_certs=certs.cert_files(),
+                          trust_cas=trust.ca_files())
     tmp = HAPROXY_CFG.with_suffix(".cfg.tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
@@ -808,7 +810,7 @@ def validate_service(svc: dict) -> list:
         errors.append("flash.field_invalid_backend")
     if svc.get("scheme") not in _RE_SCHEME:
         errors.append("flash.field_invalid_scheme")
-    if svc.get("backend_ca") not in ("", "public", "internal"):   # Stufe 2
+    if svc.get("backend_ca") not in ("", "public", "internal", "custom"):   # Stufe 2 / #21
         errors.append("flash.field_invalid_backend_ca")
     color = svc.get("color", "")
     if color and not _RE_COLOR.match(color):
@@ -1005,6 +1007,7 @@ def admin():
         update=update_info,
         update_audit=updater.read_audit(40),
         cert_list=certs.list_certs(),
+        trust_list=trust.list_cas(),
         tcp_streams=cfg["tcp_streams"],
         stream_status=stream_status,
         edit_stream=edit_stream,
@@ -1367,6 +1370,37 @@ def admin_cert_delete():
         _log.info("Zertifikat geloescht: %s", os.path.basename(name))
         flash(t("flash.cert_deleted", name=os.path.basename(name)), "ok")
     return redirect(url_for("admin") + "#domains")
+
+
+@app.route("/admin/ca", methods=["POST"])
+@requires_auth
+def admin_ca_upload():
+    # #21: vertrauenswuerdige Backend-CA / self-signed Ziel-Cert hochladen (ohne Key).
+    t = _t()
+    ca_f = request.files.get("ca_file")
+    if not ca_f or not ca_f.filename:
+        flash(t("flash.ca_need_file"), "error")
+        return redirect(url_for("admin") + "#trust")
+    ok, info = trust.save_ca(ca_f.filename, ca_f.read())
+    if ok:
+        regenerate(load_config())          # cfg-Hash aendert sich -> Watcher reload
+        _log.info("Backend-CA hinzugefuegt: %s", info)
+        flash(t("flash.ca_saved", name=info), "ok")
+    else:
+        flash(t(info), "error")
+    return redirect(url_for("admin") + "#trust")
+
+
+@app.route("/admin/ca/delete", methods=["POST"])
+@requires_auth
+def admin_ca_delete():
+    t = _t()
+    name = request.form.get("file", "")
+    if trust.delete_ca(name):
+        regenerate(load_config())
+        _log.info("Backend-CA geloescht: %s", os.path.basename(name))
+        flash(t("flash.ca_deleted", name=os.path.basename(name)), "ok")
+    return redirect(url_for("admin") + "#trust")
 
 
 # ----------------------------------------------------------------------------

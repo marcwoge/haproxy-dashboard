@@ -108,6 +108,23 @@ certificates **externally** with `acme.sh`/`lego` via your provider's DNS API an
 upload/renew the resulting `fullchain.pem` (including the key) via cron. Provider
 credentials belong on the host as a secret, not in `services.yaml`.
 
+### Verifying backend certificates (custom/internal CA)
+
+The counterpart to the front side: to have HAProxy verify an **https backend**
+(`verify SSL`), pick the **backend CA** per service under **"Advanced"**:
+
+- **Public CAs** (default) – the container's CA bundle.
+- **Internal CA (step-ca)** – the platform's own CA (compose profile `ca`, see
+  [`ca/README.md`](ca/README.md)).
+- **Custom / uploaded CAs** – under **"Trusted backend CAs"** upload a
+  **company/AD root CA** or a target's **self-signed certificate** (PEM or DER,
+  **without** a private key). HAProxy then verifies backends against it. Also
+  applies to the health checks of external link tiles.
+
+This verifies, e.g., an internal target with a self-signed cert or a service whose
+cert comes from the corporate PKI, instead of talking to it unverified with
+`verify SSL` off. Expiry warning as with the SNI certificates.
+
 ---
 
 ## 3. Adding a container as a tile
