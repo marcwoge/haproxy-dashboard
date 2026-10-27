@@ -126,6 +126,20 @@ So wird z. B. ein internes Ziel mit self-signed Cert oder ein Dienst mit einem C
 aus der Firmen-PKI **verifiziert** statt nur mit `SSL-Prüfung aus` ungeprüft
 angesprochen. Ablaufwarnung wie bei den SNI-Zertifikaten.
 
+### Hinter einem Proxy/Tunnel (echte Client-IP)
+
+Steht HAProxy hinter einem Reverse-Proxy oder Tunnel (z. B. **Cloudflare Tunnel**),
+sieht es als Quelle nur den Proxy – die Login-Sperre und die Logs arbeiten dann mit
+dieser einen IP (ein Angreifer sperrt alle aus). Mit `REAL_IP_HEADER` +
+`TRUSTED_PROXIES` (in der `.env`) übernimmt HAProxy die echte Client-IP aus dem
+Header – **nur**, wenn die Verbindung aus einem vertrauenswürdigen Netz kommt
+(sonst wäre der Header fälschbar):
+
+```bash
+REAL_IP_HEADER=CF-Connecting-IP
+TRUSTED_PROXIES=173.245.48.0/20 103.21.244.0/22   # Netze deines Proxys/Tunnels
+```
+
 ---
 
 ## 3. Einen Container als Kachel hinzufügen
