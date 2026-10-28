@@ -170,6 +170,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # #36: the step-ca binary carries a file capability (cap_net_bind_service=eip).
+    # With cap_drop ALL + no-new-privileges the kernel refuses to exec it ("Operation
+    # not permitted", restart loop). Port 9000 does not need it, but the file
+    # capability is enforced on exec, so this single cap must be back in the bounding
+    # set. Everything else stays dropped.
+    cap_add:
+      - NET_BIND_SERVICE
     networks:
       - platform
     restart: unless-stopped
