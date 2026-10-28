@@ -43,6 +43,20 @@ as before and no CA is started.
    docker compose logs step-ca | grep -i fingerprint
    ```
 
+   The fingerprint line appears **during init** — it does not mean the server is up.
+   Verify the container is actually serving (not stuck in a restart loop):
+
+   ```bash
+   docker compose ps step-ca                 # must show "Up"/healthy, not "Restarting"
+   docker compose logs step-ca | grep -i "Serving HTTPS"
+   ```
+
+   > **Capability (#36):** the step-ca binary carries a file capability
+   > (`cap_net_bind_service=eip`). The service keeps `cap_drop: ALL` and
+   > `no-new-privileges`, so that one capability is added back via
+   > `cap_add: NET_BIND_SERVICE` in `docker-compose.yml` — without it the kernel
+   > refuses to exec the binary (`Operation not permitted`, restart loop).
+
 ## What lives where
 
 - `data/step-ca/` — CA config, the public certs and the **encrypted** private keys.
