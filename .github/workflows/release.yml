@@ -22,14 +22,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Login to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
       - name: Build & push config-app
         id: config
@@ -80,11 +80,14 @@ jobs:
       - name: Sign images (keyless)
         env:
           COSIGN_YES: "true"
+        # cosign v3 signiert standardmaessig im neuen Sigstore-Bundle-Format, das ein
+        # cosign v2 auf den Hosts (updater/host-updater.sh) nicht findet. Legacy-Format
+        # beibehalten, bis alle Hosts cosign v3 haben (deprecated, aber unterstuetzt).
         run: |
-          cosign sign "ghcr.io/${{ github.repository }}/config-app@${{ steps.config.outputs.digest }}"
-          cosign sign "ghcr.io/${{ github.repository }}/haproxy@${{ steps.haproxy.outputs.digest }}"
-          cosign sign "ghcr.io/${{ github.repository }}/connector@${{ steps.connector.outputs.digest }}"
-          cosign sign "ghcr.io/${{ github.repository }}/cert-agent@${{ steps.certagent.outputs.digest }}"
+          cosign sign --new-bundle-format=false --use-signing-config=false "ghcr.io/${{ github.repository }}/config-app@${{ steps.config.outputs.digest }}"
+          cosign sign --new-bundle-format=false --use-signing-config=false "ghcr.io/${{ github.repository }}/haproxy@${{ steps.haproxy.outputs.digest }}"
+          cosign sign --new-bundle-format=false --use-signing-config=false "ghcr.io/${{ github.repository }}/connector@${{ steps.connector.outputs.digest }}"
+          cosign sign --new-bundle-format=false --use-signing-config=false "ghcr.io/${{ github.repository }}/cert-agent@${{ steps.certagent.outputs.digest }}"
 
       # Legt fuer den Tag einen GitHub-Release-Eintrag mit automatischen Notizen an
       # (idempotent: existiert er schon, wird er uebersprungen).
