@@ -54,8 +54,17 @@ EXTRA_CERT_DIR = "/certs-extra"
 # Interner Stats-Port (nur im Docker-Netz erreichbar, NICHT auf dem Host)
 STATS_PORT = 8404
 
+# Prometheus-Exporter (in HAProxy eingebaut, USE_PROMEX). Fuer externes Monitoring
+# (z. B. Ironwatch-Agent-Modul "haproxy" -> http://127.0.0.1:8405/metrics).
+# docker-compose.yml veroeffentlicht den Port NUR auf 127.0.0.1 des Hosts.
+# Default an; PROMETHEUS_EXPORTER=false schaltet den Frontend ab.
+PROMEX_PORT = 8405
+PROMETHEUS_EXPORTER = (os.environ.get("PROMETHEUS_EXPORTER", "true").strip().lower()
+                       not in ("false", "0", "no", "off"))
+
 # E3: TCP-Streams. Diese Ports sind durch HAProxy-Frontends belegt und tabu.
-TCP_RESERVED_PORTS = {80, 443, STATS_PORT}
+# 8405 bleibt auch bei abgeschaltetem Exporter reserviert (Port-Mapping in Compose).
+TCP_RESERVED_PORTS = {80, 443, STATS_PORT, PROMEX_PORT}
 # TCP-Verbindungen sind oft langlebig (DB, SSH, ...) -> grosszuegiger Default,
 # falls pro Stream kein Timeout gesetzt ist.
 TCP_DEFAULT_TIMEOUT = "1h"
@@ -355,6 +364,15 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None,
     A(f"    ssl-default-bind-ciphersuites {TLS_CIPHERSUITES}")
     A("    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets")
     A("")
+    if PROMETHEUS_EXPORTER:
+        # Eigene, minimale Defaults fuer den Metrik-Frontend: ohne 'log global' und
+        # 'option httplog' (sonst warnt 'haproxy -c' bei 'no log' ueber ein ignoriertes
+        # Log-Format). Wie 'tcp' VOR den unbenannten Defaults, Nutzung nur ueber 'from'.
+        A("defaults promex")
+        A("    mode http")
+        A("    timeout client 10s")
+        A("    timeout http-request 10s")
+        A("")
     # E3/#13: eigene Defaults fuer TCP-Streams OHNE HTTP-Optionen -> keine
     # 'option forwardfor ignored'-Warnungen. MUSS vor den unbenannten (HTTP-)
     # Defaults stehen: HAProxy nimmt die LETZTE Defaults-Sektion als implizite
@@ -402,6 +420,18 @@ def render(config: dict, stats_auth: str = "", extra_certs=None, trust_cas=None,
         A("    stats realm HAProxy\\ Statistics")
         A(f"    stats auth {stats_auth}")
     A("")
+    if PROMETHEUS_EXPORTER:
+        # Containerintern auf allen Interfaces, damit das Docker-Port-Mapping greift
+        # (127.0.0.1 im Container waere vom Host aus nicht erreichbar). Nach aussen
+        # ist der Port nur auf 127.0.0.1 des Hosts veroeffentlicht (docker-compose.yml).
+        A("# Prometheus-Metriken (eingebauter Exporter, Host: nur 127.0.0.1:8405)")
+        A("frontend prometheus from promex")
+        A(f"    bind :{PROMEX_PORT}")
+        A("    mode http")
+        A("    no log")
+        A("    http-request use-service prometheus-exporter if { path /metrics }")
+        A("    http-request deny deny_status 404")
+        A("")
     # ---- Routing-Regeln einmal bauen (frontend-unabhaengig) ----
     # #24: Routing nach Pfad UND/ODER Host. ACLs + deny sammeln wir in route_lines,
     # use_backend getrennt in ub_lines -> derselbe Body laesst sich in fe_https ODER

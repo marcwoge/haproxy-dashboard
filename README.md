@@ -308,7 +308,7 @@ Für Dienste, die kein HTTP sprechen (Datenbank, SSH, SMTP, …), gibt es im Adm
 die Karte **„TCP-Streams"**. Ein Stream hört auf einem **eigenen Port** und leitet
 reines TCP (`mode tcp`) an ein oder mehrere Ziele weiter:
 
-- **Eigener Listen-Port** (1–65535, nicht 80/443/8404) — pro Stream eindeutig.
+- **Eigener Listen-Port** (1–65535, nicht 80/443/8404/8405) — pro Stream eindeutig.
 - **Mehrere Ziele + Lastverteilung** — ein `host:port` oder mehrere (eine pro Zeile);
   ab zwei Zielen wird lastverteilt (`leastconn` Standard, oder `roundrobin`).
 - **Optionale TLS-Terminierung** mit dem **Plattform-Zertifikat** — HAProxy entschlüsselt,
@@ -438,6 +438,41 @@ Das Admin-GUI aktualisiert sich live (Polling alle ~3 s):
 - **Log-Anzeige** unten: HAProxy- bzw. config-app-Log, wählbare Zeilenzahl,
   Auto-Refresh. Beide Logs werden zusätzlich in Dateien unter `data\haproxy\`
   geschrieben (mit Rotation) und sind weiterhin über `docker compose logs` sichtbar.
+
+### Prometheus-Metriken (Monitoring)
+
+HAProxy bringt einen **eingebauten Prometheus-Exporter** mit (`USE_PROMEX`, im
+offiziellen Image `haproxy:3.4.x` enthalten – prüfbar mit
+`docker compose exec haproxy haproxy -vv | grep -i promex`). Die generierte Config
+enthält dafür einen eigenen Frontend:
+
+```
+frontend prometheus from promex
+    bind :8405
+    mode http
+    no log
+    http-request use-service prometheus-exporter if { path /metrics }
+    http-request deny deny_status 404
+```
+
+- **Inhalt:** Prozess-, Frontend-, Backend- und Serverzustände im
+  Prometheus-Textformat (`haproxy_process_*`, `haproxy_frontend_*`,
+  `haproxy_backend_*`, `haproxy_server_*`, u. a. `haproxy_process_build_info`,
+  `haproxy_backend_status`, `haproxy_server_status`). Alle anderen Pfade → 404.
+- **Nur lokal:** `docker-compose.yml` veröffentlicht den Port ausschließlich auf
+  der Loopback-Schnittstelle des Hosts (`127.0.0.1:8405:8405`) – von außen ist er
+  **nicht** erreichbar, eine Firewall-Freigabe ist nicht nötig. Containerintern
+  lauscht HAProxy auf allen Interfaces (sonst griffe das Docker-Port-Mapping
+  nicht); damit können auch Container im Netz `acme-platform` die Metriken lesen.
+  Den Port **nie** auf `0.0.0.0` veröffentlichen (auch nicht im Override).
+- **Abschalten:** `PROMETHEUS_EXPORTER=false` in `.env`, dann
+  `docker compose up -d` – die config-app rendert den Frontend nicht mehr.
+  Port 8405 bleibt für TCP-Streams reserviert.
+- **Ironwatch:** Das Agent-Modul **„haproxy“** des Monitorings Ironwatch (Grafana
+  Alloy) liest `http://127.0.0.1:8405/metrics` auf dem HAProxy-Host und zeigt daraus
+  Frontends, Backends und Serverzustände. Jeder andere lokale Prometheus-Scraper
+  funktioniert genauso. Schnelltest auf dem Host:
+  `curl -s http://127.0.0.1:8405/metrics | grep haproxy_process_build_info`
 
 ### Benachrichtigungen (E-Mail / Webhook)
 

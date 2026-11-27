@@ -49,6 +49,10 @@ services:
       # "http" = TLS terminates upstream (e.g. a Cloudflare Tunnel) -> route directly
       # on :80, no redirect. Then publish :80 (not :443) to the tunnel.
       - FRONTEND_MODE=${FRONTEND_MODE:-https}
+      # Built-in HAProxy Prometheus exporter (frontend "prometheus", /metrics on
+      # port 8405). Default on; "false" removes the frontend from the generated
+      # config. The port is published ONLY on the host's 127.0.0.1 (haproxy below).
+      - PROMETHEUS_EXPORTER=${PROMETHEUS_EXPORTER:-true}
       # APP_VERSION is NOT set here - it is baked into the image (build arg),
       # so a pulled GHCR image reports its real release version.
       - UPDATE_REPO=${UPDATE_REPO:-your-org/haproxy-dashboard}
@@ -108,6 +112,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Prometheus metrics (/metrics) for local monitoring agents (e.g. Ironwatch,
+      # Grafana Alloy). Bound to the HOST LOOPBACK ONLY - never publish this on
+      # 0.0.0.0. Disable the exporter with PROMETHEUS_EXPORTER=false (config-app).
+      - "127.0.0.1:8405:8405"
       # E3: TCP streams need their listen ports published. Put them in
       # docker-compose.override.yml (copy docker-compose.override.yml.example) so
       # they survive updates - NOT here. The admin GUI shows the exact lines.

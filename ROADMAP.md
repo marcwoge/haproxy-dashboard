@@ -8,6 +8,7 @@
 - [x] Pfad-basiertes Routing (Container-Name **oder** Host:Port), SSL-Prüfung abschaltbar
 - [x] Admin-GUI: Services & Design verwalten, Auto-Reload mit Validierung
 - [x] Status-/Fehleranzeige, Live-Backend-Health, Log-Anzeige im Admin
+- [x] Prometheus-Metriken (eingebauter HAProxy-Exporter, `/metrics` auf `127.0.0.1:8405`, abschaltbar via `PROMETHEUS_EXPORTER`)
 
 ## Update-Kanal (dieses Feature)
 - [x] Versionsstempel im Image (`APP_VERSION`) + `VERSION` als Quelle der Wahrheit

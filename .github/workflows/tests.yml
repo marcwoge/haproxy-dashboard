@@ -1,0 +1,33 @@
+name: Tests
+
+# Konfigurationserzeugung (config-app/haproxy_render.py) testen und die gerenderte
+# haproxy.cfg mit `haproxy -c` im HAProxy-Image der Plattform validieren.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  config-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Python-Abhaengigkeiten installieren
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -q -r config-app/requirements.txt
+      - name: HAProxy-Image bauen (fuer haproxy -c)
+        run: docker build --pull -t platform-haproxy:test haproxy
+      - name: Unit-Tests + haproxy -c
+        env:
+          HAPROXY_IMAGE: platform-haproxy:test
+        run: .venv/bin/python -m unittest discover -s config-app/tests -v

@@ -8,6 +8,7 @@
 - [x] Path-based routing (container name **or** host:port), SSL check toggleable
 - [x] Admin GUI: manage services & design, auto-reload with validation
 - [x] Status/error display, live backend health, log view in admin
+- [x] Prometheus metrics (built-in HAProxy exporter, `/metrics` on `127.0.0.1:8405`, can be disabled via `PROMETHEUS_EXPORTER`)
 
 ## Update channel (this feature)
 - [x] Version stamp in the image (`APP_VERSION`) + `VERSION` as the source of truth
